@@ -1,4 +1,4 @@
-# Stellaris Charts
+# StellarisCharts
 
 Parse Stellaris save files (`.sav`) and visualize empire and galaxy stats in a web UI.
 
