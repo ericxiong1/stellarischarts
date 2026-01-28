@@ -3,9 +3,41 @@ using StellarisCharts.Api.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http.Features;
 using System.Globalization;
+using System.IO;
 using System.IO.Compression;
+using DotNetEnv;
 
+string? envLoadedFrom = null;
+string? FindEnvUpwards(string start)
+{
+    var dir = new DirectoryInfo(start);
+    while (dir != null)
+    {
+        var candidate = Path.Combine(dir.FullName, ".env");
+        if (File.Exists(candidate))
+            return candidate;
+        dir = dir.Parent;
+    }
+    return null;
+}
+
+var envPath = FindEnvUpwards(Directory.GetCurrentDirectory())
+    ?? FindEnvUpwards(AppContext.BaseDirectory);
+
+if (envPath != null)
+{
+    Env.Load(envPath);
+    envLoadedFrom = envPath;
+}
 var builder = WebApplication.CreateBuilder(args);
+
+var envConnection =
+    Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection") ??
+    Environment.GetEnvironmentVariable("ConnectionStrings:DefaultConnection");
+if (!string.IsNullOrWhiteSpace(envConnection))
+{
+    builder.Configuration["ConnectionStrings:DefaultConnection"] = envConnection;
+}
 
 // Configure Kestrel to accept large file uploads
 builder.WebHost.ConfigureKestrel(options =>
@@ -25,7 +57,9 @@ builder.Services.Configure<FormOptions>(options =>
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 if (string.IsNullOrWhiteSpace(connectionString))
 {
-    throw new InvalidOperationException("Missing DefaultConnection. Set it in appsettings.json or environment variables.");
+    throw new InvalidOperationException(
+        $"Missing DefaultConnection. envLoadedFrom={envLoadedFrom ?? "none"}, " +
+        $"envVar={(string.IsNullOrWhiteSpace(envConnection) ? "missing" : "present")}");
 }
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
