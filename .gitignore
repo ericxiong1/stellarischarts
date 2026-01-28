@@ -1,0 +1,7 @@
+saves
+backend/StellarisCharts.Api/appsettings.json
+**/bin/
+**/obj/
+frontend/node_modules/
+.env
+.env.*
