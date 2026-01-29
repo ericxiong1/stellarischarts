@@ -7,6 +7,8 @@ Parse Stellaris save files (`.sav`) and visualize empire and galaxy stats in a w
 - Store snapshots, budgets, and species demographics in Postgres
 - Show empire and galaxy dashboards (charts, monthlies, species pie, if you like numbers like me :p)
 
+<img width="1318" height="1019" alt="image" src="https://github.com/user-attachments/assets/3e7d619a-30ba-4721-84a6-baa6ab48974b" />
+
 ## Prereqs
 - .NET SDK 10
 - Node.js 18+
