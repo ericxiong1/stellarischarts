@@ -349,7 +349,15 @@ export const CountryDetail: React.FC<CountryDetailProps> = ({ country }) => {
                       <span className="text-[10px] font-bold uppercase tracking-wide text-foreground">
                         {item.label}
                       </span>
-                      <span className="text-foreground/90">{item.value}</span>
+                      <span
+                        className={
+                          item.label === 'Diplomatic Stance' && isGenocidalStance(item.value)
+                            ? 'font-semibold text-red-500'
+                            : 'text-foreground/90'
+                        }
+                      >
+                        {item.value}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -867,6 +875,16 @@ function formatWhole(value: number): string {
 function formatSignedWhole(value: number): string {
   const sign = value >= 0 ? '+' : '';
   return `${sign}${formatWhole(value)}`;
+}
+
+function isGenocidalStance(value: string): boolean {
+  const stance = value.toLowerCase();
+  return (
+    stance.includes('purification') ||
+    stance.includes('hunger') ||
+    stance.includes('extermination') ||
+    stance.includes('devastators')
+  );
 }
 
 function SpeciesTooltip({

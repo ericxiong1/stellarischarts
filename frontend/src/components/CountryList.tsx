@@ -46,7 +46,9 @@ export const CountryList: React.FC<CountryListProps> = ({ onSelectCountry }) => 
         <Badge variant="secondary">{countries.length}</Badge>
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-1">
-        {countries.map(({ country, incomeTotals }) => (
+        {[...countries]
+          .sort((a, b) => (a.country.victoryRank || 0) - (b.country.victoryRank || 0))
+          .map(({ country, incomeTotals }) => (
           <Card
             key={country.id}
             className="cursor-pointer border-border bg-card transition hover:bg-muted/70"

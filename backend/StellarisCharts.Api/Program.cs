@@ -123,11 +123,46 @@ app.MapPost("/api/saves/upload", async (HttpRequest request, IFormFile file, Sav
             .Select(c => c.CountryId)
             .ToListAsync();
 
+        var existingCountries = await db.Countries
+            .Where(c => incomingIds.Contains(c.CountryId))
+            .ToListAsync();
+
+        var existingById = existingCountries.ToDictionary(c => c.CountryId);
+
         foreach (var country in distinctCountries)
         {
             if (!existingIds.Contains(country.CountryId))
             {
                 db.Countries.Add(country);
+                continue;
+            }
+
+            if (existingById.TryGetValue(country.CountryId, out var existing))
+            {
+                // Keep names in sync with latest save data
+                existing.Name = country.Name;
+                existing.Adjective = country.Adjective;
+                existing.GovernmentType = country.GovernmentType;
+                existing.Authority = country.Authority;
+                existing.Ethos = country.Ethos;
+                existing.Civics = country.Civics;
+                existing.TraditionTrees = country.TraditionTrees;
+                existing.AscensionPerks = country.AscensionPerks;
+                existing.FederationType = country.FederationType;
+                existing.SubjectStatus = country.SubjectStatus;
+                existing.DiplomaticStance = country.DiplomaticStance;
+                existing.DiplomaticWeight = country.DiplomaticWeight;
+                existing.Personality = country.Personality;
+                existing.GraphicalCulture = country.GraphicalCulture;
+                existing.Capital = country.Capital;
+                existing.MilitaryPower = country.MilitaryPower;
+                existing.EconomyPower = country.EconomyPower;
+                existing.TechPower = country.TechPower;
+                existing.FleetSize = country.FleetSize;
+                existing.EmpireSize = country.EmpireSize;
+                existing.NumSapientPops = country.NumSapientPops;
+                existing.VictoryRank = country.VictoryRank;
+                existing.VictoryScore = country.VictoryScore;
             }
         }
         

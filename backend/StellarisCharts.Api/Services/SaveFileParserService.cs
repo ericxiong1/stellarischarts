@@ -15,16 +15,19 @@ public class SaveFileParserService
         result.GameDate = ExtractStringValue(content, @"^date=""([^""]+)""") ?? "Unknown";
         result.Tick = ExtractIntValue(content, @"^tick=(\d+)");
         
-        var federationTypes = ParseFederationTypes(content);
+        var federationInfo = ParseFederationInfo(content);
+
+        var countryDataById = new Dictionary<int, string>();
 
         // Extract all countries
         if (TryExtractTopLevelBlock(content, "country", out var countriesContent))
         {
             var countryBlocks = ExtractCountryBlocks(countriesContent);
+            countryDataById = countryBlocks.ToDictionary(c => c.id, c => c.data);
             
             foreach (var (countryId, countryData) in countryBlocks)
             {
-                var country = ParseCountry(countryId, countryData, federationTypes);
+                var country = ParseCountry(countryId, countryData);
                 if (country != null)
                 {
                     result.Countries.Add(country);
@@ -39,6 +42,21 @@ public class SaveFileParserService
         if (result.Countries.Count > 0)
         {
             var countryNameById = result.Countries.ToDictionary(c => c.CountryId, c => c.Name);
+            var countryAdjectiveById = result.Countries.ToDictionary(c => c.CountryId, c => c.Adjective);
+
+            var federationNames = ResolveFederationNames(federationInfo, countryAdjectiveById);
+            foreach (var country in result.Countries)
+            {
+                if (countryDataById.TryGetValue(country.CountryId, out var data))
+                {
+                    var federationId = ExtractFederationId(data);
+                    if (federationId != 0 && federationNames.TryGetValue(federationId, out var name))
+                    {
+                        country.FederationType = name;
+                    }
+                }
+            }
+
             foreach (var country in result.Countries)
             {
                 if (!string.IsNullOrWhiteSpace(country.SubjectStatus))
@@ -226,7 +244,7 @@ public class SaveFileParserService
         return blocks;
     }
 
-    private Country? ParseCountry(int countryId, string countryData, Dictionary<int, string> federationTypes)
+    private Country? ParseCountry(int countryId, string countryData)
     {
         try
         {
@@ -250,7 +268,7 @@ public class SaveFileParserService
                 Civics = ExtractListValue(countryData, "civics", "civic_"),
                 TraditionTrees = ExtractListValue(countryData, "tradition_categories", "tradition_"),
                 AscensionPerks = ExtractListValue(countryData, "ascension_perks", "ap_"),
-                FederationType = ExtractFederationType(countryData, federationTypes),
+                FederationType = string.Empty,
                 SubjectStatus = ExtractSubjectStatus(countryData),
                 DiplomaticStance = ExtractDiplomaticStance(countryData),
                 DiplomaticWeight = ExtractDiplomaticWeight(countryData),
@@ -513,14 +531,38 @@ public class SaveFileParserService
         var values = Regex.Matches(block, "\"([^\"]+)\"")
             .Select(m => m.Groups[1].Value)
             .Where(v => !string.IsNullOrWhiteSpace(v))
-            .Select(v => ToHumanLabel(v, prefix))
+            .Select(v =>
+            {
+                var raw = v;
+                if (string.Equals(prefix, "civic_", StringComparison.OrdinalIgnoreCase) &&
+                    raw.StartsWith("civic_hive_", StringComparison.OrdinalIgnoreCase))
+                {
+                    raw = "civic_" + raw.Substring("civic_hive_".Length);
+                }
+                return NormalizeCivicLabel(ToHumanLabel(raw, prefix));
+            })
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         return values.Count == 0 ? string.Empty : string.Join(", ", values);
     }
 
-    private string ExtractFederationType(string countryData, Dictionary<int, string> federationTypes)
+    private string NormalizeCivicLabel(string label)
+    {
+        if (string.IsNullOrWhiteSpace(label))
+            return label;
+
+        var trimmed = label.Trim();
+        const string hivePrefix = "Hive ";
+        while (trimmed.StartsWith(hivePrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = trimmed.Substring(hivePrefix.Length).TrimStart();
+        }
+
+        return trimmed;
+    }
+
+    private int ExtractFederationId(string countryData)
     {
         var federationId = ExtractIntValue(countryData, @"federation=(\d+)");
         if (federationId == 0)
@@ -528,12 +570,7 @@ public class SaveFileParserService
             federationId = ExtractIntValue(countryData, @"associated_federation=(\d+)");
         }
 
-        if (federationId == 0)
-            return string.Empty;
-
-        return federationTypes.TryGetValue(federationId, out var federationType)
-            ? federationType
-            : $"Federation {federationId}";
+        return federationId;
     }
 
     private string ExtractSubjectStatus(string countryData)
@@ -581,22 +618,105 @@ public class SaveFileParserService
         return weight == 0m ? string.Empty : weight.ToString("0.##");
     }
 
-    private Dictionary<int, string> ParseFederationTypes(string content)
+    private Dictionary<int, FederationInfo> ParseFederationInfo(string content)
     {
-        var result = new Dictionary<int, string>();
+        var result = new Dictionary<int, FederationInfo>();
         if (!TryExtractTopLevelBlock(content, "federation", out var federationContent))
             return result;
 
         foreach (var (federationId, federationData) in ExtractIdBlocks(federationContent))
         {
-            var type = ExtractStringValue(federationData, @"federation_type=""([^""]+)""");
-            if (string.IsNullOrWhiteSpace(type))
-                continue;
-
-            result[federationId] = ToHumanLabel(type, "federation_");
+            var nameTemplate = ExtractNameTemplate(federationData);
+            var typeFallback = ExtractStringValue(federationData, @"federation_type=""([^""]+)""");
+            if (!string.IsNullOrWhiteSpace(typeFallback))
+            {
+                typeFallback = ToHumanLabel(typeFallback, "federation_");
+            }
+            var members = ExtractIntList(ExtractInlineBlockOrEmpty(federationData, "members"));
+            if (!string.IsNullOrWhiteSpace(nameTemplate) || members.Count > 0)
+            {
+                result[federationId] = new FederationInfo(nameTemplate, typeFallback ?? string.Empty, members);
+            }
         }
 
         return result;
+    }
+
+    private Dictionary<int, string> ResolveFederationNames(
+        Dictionary<int, FederationInfo> federationInfo,
+        Dictionary<int, string> countryAdjectiveById)
+    {
+        var result = new Dictionary<int, string>();
+        foreach (var (id, info) in federationInfo)
+        {
+            var template = info.NameTemplate;
+            if (string.IsNullOrWhiteSpace(template))
+                continue;
+
+            var adjective = info.Members
+                .Select(memberId => countryAdjectiveById.TryGetValue(memberId, out var adj) ? adj : null)
+                .FirstOrDefault(adj => !string.IsNullOrWhiteSpace(adj));
+
+            var resolved = template;
+            if (!string.IsNullOrWhiteSpace(adjective) && resolved.Contains("%ADJ%", StringComparison.OrdinalIgnoreCase))
+            {
+                resolved = resolved.Replace("%ADJ%", adjective, StringComparison.OrdinalIgnoreCase);
+            }
+
+            if (resolved.Contains("%ADJ%", StringComparison.OrdinalIgnoreCase))
+            {
+                resolved = string.Empty;
+            }
+
+            resolved = NormalizeFederationName(resolved);
+            if (string.IsNullOrWhiteSpace(resolved) && !string.IsNullOrWhiteSpace(info.TypeFallback))
+            {
+                resolved = info.TypeFallback;
+            }
+
+            if (!string.IsNullOrWhiteSpace(resolved))
+            {
+                result[id] = resolved;
+            }
+        }
+
+        return result;
+    }
+
+    private string ExtractNameTemplate(string federationData)
+    {
+        if (!TryExtractInlineBlock(federationData, "name", out var nameBlock))
+            return string.Empty;
+
+        var keys = Regex.Matches(nameBlock, @"key=""([^""]+)""")
+            .Select(m => m.Groups[1].Value)
+            .Where(v => !string.IsNullOrWhiteSpace(v) && !Regex.IsMatch(v, @"^\d+$"))
+            .ToList();
+
+        if (keys.Count == 0)
+            return string.Empty;
+
+        return string.Join(' ', keys);
+    }
+
+    private string ExtractInlineBlockOrEmpty(string content, string key)
+    {
+        return TryExtractInlineBlock(content, key, out var block) ? block : string.Empty;
+    }
+
+    private record FederationInfo(string NameTemplate, string TypeFallback, List<int> Members);
+
+    private string NormalizeFederationName(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return value;
+
+        if (value.StartsWith("NAME_", StringComparison.Ordinal))
+        {
+            return value.Substring("NAME_".Length).Replace('_', ' ');
+        }
+
+        return value.Replace('_', ' ');
     }
 
     private bool ShouldExcludeByName(string name)
