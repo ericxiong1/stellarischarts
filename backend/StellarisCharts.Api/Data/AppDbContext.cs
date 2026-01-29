@@ -10,6 +10,7 @@ public class AppDbContext : DbContext
     public DbSet<Country> Countries => Set<Country>();
     public DbSet<Snapshot> Snapshots => Set<Snapshot>();
     public DbSet<BudgetLineItem> BudgetLineItems => Set<BudgetLineItem>();
+    public DbSet<ResourceStockpile> ResourceStockpiles => Set<ResourceStockpile>();
     public DbSet<SpeciesPopulation> SpeciesPopulations => Set<SpeciesPopulation>();
     public DbSet<GlobalSpeciesPopulation> GlobalSpeciesPopulations => Set<GlobalSpeciesPopulation>();
     public DbSet<WarStatus> WarStatuses => Set<WarStatus>();
@@ -35,6 +36,12 @@ public class AppDbContext : DbContext
             .HasForeignKey(b => b.SnapshotId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        modelBuilder.Entity<Snapshot>()
+            .HasMany(s => s.ResourceStockpiles)
+            .WithOne(r => r.Snapshot)
+            .HasForeignKey(r => r.SnapshotId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         // BudgetLineItem configuration
         modelBuilder.Entity<BudgetLineItem>()
             .HasOne(b => b.Country)
@@ -56,6 +63,26 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<BudgetLineItem>()
             .Property(li => li.ResourceType)
+            .HasMaxLength(64);
+
+        modelBuilder.Entity<ResourceStockpile>()
+            .HasOne(r => r.Country)
+            .WithMany()
+            .HasForeignKey(r => r.CountryId)
+            .HasPrincipalKey(c => c.CountryId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ResourceStockpile>()
+            .HasIndex(r => new { r.SnapshotId, r.CountryId, r.ResourceType });
+
+        modelBuilder.Entity<ResourceStockpile>()
+            .HasIndex(r => r.SnapshotId);
+
+        modelBuilder.Entity<ResourceStockpile>()
+            .HasIndex(r => r.CountryId);
+
+        modelBuilder.Entity<ResourceStockpile>()
+            .Property(r => r.ResourceType)
             .HasMaxLength(64);
 
         modelBuilder.Entity<SpeciesPopulation>()

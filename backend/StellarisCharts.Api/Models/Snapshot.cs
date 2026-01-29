@@ -18,4 +18,5 @@ public class Snapshot
 
     public Country? Country { get; set; }
     public ICollection<BudgetLineItem> BudgetLineItems { get; set; } = [];
+    public ICollection<ResourceStockpile> ResourceStockpiles { get; set; } = [];
 }

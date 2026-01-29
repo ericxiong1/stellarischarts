@@ -73,6 +73,14 @@ export interface BudgetLineItem {
   amount: number;
 }
 
+export interface ResourceStockpile {
+  id: number;
+  snapshotId: number;
+  countryId: number;
+  resourceType: string;
+  amount: number;
+}
+
 export interface SpeciesBreakdown {
   speciesName: string;
   amount: number;
@@ -125,6 +133,11 @@ export const api = {
 
   getSnapshotBudget: async (snapshotId: number): Promise<BudgetLineItem[]> => {
     const response = await axios.get(`${API_BASE}/snapshots/${snapshotId}/budget`);
+    return response.data;
+  },
+
+  getSnapshotStockpile: async (snapshotId: number): Promise<ResourceStockpile[]> => {
+    const response = await axios.get(`${API_BASE}/snapshots/${snapshotId}/stockpile`);
     return response.data;
   },
 

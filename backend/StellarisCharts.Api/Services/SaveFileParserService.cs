@@ -35,6 +35,10 @@ public class SaveFileParserService
                     // Extract budget data
                     var budgetItems = ParseBudget(countryId, countryData);
                     result.BudgetLineItems.AddRange(budgetItems);
+
+                    // Extract resource stockpiles
+                    var stockpileItems = ParseResourceStockpile(countryId, countryData);
+                    result.ResourceStockpiles.AddRange(stockpileItems);
                 }
             }
         }
@@ -990,6 +994,33 @@ public class SaveFileParserService
         return items;
     }
 
+    private List<ResourceStockpile> ParseResourceStockpile(int countryId, string countryData)
+    {
+        var items = new List<ResourceStockpile>();
+        if (!TryExtractInlineBlock(countryData, "standard_economy_module", out var economyModule))
+            return items;
+
+        if (!TryExtractInlineBlock(economyModule, "resources", out var resourcesBlock))
+            return items;
+
+        var resourcePattern = @"(\w+)=([0-9.]+)";
+        foreach (Match resourceMatch in Regex.Matches(resourcesBlock, resourcePattern))
+        {
+            var resourceType = resourceMatch.Groups[1].Value;
+            if (decimal.TryParse(resourceMatch.Groups[2].Value, out var amount))
+            {
+                items.Add(new ResourceStockpile
+                {
+                    CountryId = countryId,
+                    ResourceType = resourceType,
+                    Amount = amount
+                });
+            }
+        }
+
+        return items;
+    }
+
     private List<SpeciesPopulation> ParseSpeciesDemographics(string content, HashSet<int> allowedCountries)
     {
         if (!TryExtractTopLevelBlock(content, "species_db", out var speciesDbContent))
@@ -1226,6 +1257,7 @@ public class ParseResult
 {
     public List<Country> Countries { get; set; } = new();
     public List<BudgetLineItem> BudgetLineItems { get; set; } = new();
+    public List<ResourceStockpile> ResourceStockpiles { get; set; } = new();
     public List<SpeciesPopulation> SpeciesPopulations { get; set; } = new();
     public List<GlobalSpeciesPopulation> GlobalSpeciesPopulations { get; set; } = new();
     public List<ParsedWar> Wars { get; set; } = new();

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../api';
-import type { Country, Snapshot, BudgetLineItem, SpeciesBreakdown, WarStatus } from '../api';
+import type { Country, Snapshot, BudgetLineItem, ResourceStockpile, SpeciesBreakdown, WarStatus } from '../api';
 import {
   LineChart,
   Line,
@@ -46,13 +46,16 @@ export const CountryDetail: React.FC<CountryDetailProps> = ({ country }) => {
   const [selectedSnapshot, setSelectedSnapshot] = useState<Snapshot | null>(null);
   const [budgetItems, setBudgetItems] = useState<BudgetLineItem[]>([]);
   const [previousBudgetItems, setPreviousBudgetItems] = useState<BudgetLineItem[]>([]);
+  const [stockpileItems, setStockpileItems] = useState<ResourceStockpile[]>([]);
+  const [previousStockpileItems, setPreviousStockpileItems] = useState<ResourceStockpile[]>([]);
   const [allCountries, setAllCountries] = useState<Country[]>([]);
   const [speciesBreakdown, setSpeciesBreakdown] = useState<SpeciesBreakdown[]>([]);
   const [previousSpeciesBreakdown, setPreviousSpeciesBreakdown] = useState<SpeciesBreakdown[]>([]);
   const [speciesHistory, setSpeciesHistory] = useState<Map<number, SpeciesBreakdown[]>>(new Map());
   const [warStatuses, setWarStatuses] = useState<WarStatus[]>([]);
   const [loading, setLoading] = useState(false);
-  const [empireTab, setEmpireTab] = useState<'overview' | 'economy'>('overview');
+  const [empireTab, setEmpireTab] = useState<'overview' | 'economy' | 'military'>('overview');
+  const [economyFilter, setEconomyFilter] = useState<string>('all');
 
   useEffect(() => {
     if (!country) return;
@@ -114,6 +117,8 @@ export const CountryDetail: React.FC<CountryDetailProps> = ({ country }) => {
       try {
         const data = await api.getSnapshotBudget(selectedSnapshot.id);
         setBudgetItems(data);
+        const stockpile = await api.getSnapshotStockpile(selectedSnapshot.id);
+        setStockpileItems(stockpile);
         const ordered = [...snapshots].sort(
           (a, b) => parseGameDate(a.gameDate) - parseGameDate(b.gameDate)
         );
@@ -122,10 +127,13 @@ export const CountryDetail: React.FC<CountryDetailProps> = ({ country }) => {
         if (prev) {
           const prevData = await api.getSnapshotBudget(prev.id);
           setPreviousBudgetItems(prevData);
+          const prevStockpile = await api.getSnapshotStockpile(prev.id);
+          setPreviousStockpileItems(prevStockpile);
           const prevSpecies = await api.getSnapshotSpecies(prev.id);
           setPreviousSpeciesBreakdown(prevSpecies);
         } else {
           setPreviousBudgetItems([]);
+          setPreviousStockpileItems([]);
           setPreviousSpeciesBreakdown([]);
         }
         const species = await api.getSnapshotSpecies(selectedSnapshot.id);
@@ -220,6 +228,47 @@ export const CountryDetail: React.FC<CountryDetailProps> = ({ country }) => {
     }
     return totals;
   }, [previousBudgetItems]);
+
+  const stockpileTotals = useMemo(() => {
+    const totals: Record<string, number> = {};
+    for (const item of stockpileItems) {
+      totals[item.resourceType] = (totals[item.resourceType] ?? 0) + Number(item.amount);
+    }
+    return totals;
+  }, [stockpileItems]);
+
+  const previousStockpileTotals = useMemo(() => {
+    const totals: Record<string, number> = {};
+    for (const item of previousStockpileItems) {
+      totals[item.resourceType] = (totals[item.resourceType] ?? 0) + Number(item.amount);
+    }
+    return totals;
+  }, [previousStockpileItems]);
+
+  const resourceCards = useMemo(
+    () =>
+      [
+        { key: 'energy', label: 'Energy Credits', Icon: Zap, iconClass: 'text-yellow-300' },
+        { key: 'minerals', label: 'Minerals', Icon: Gem, iconClass: 'text-red-400' },
+        { key: 'food', label: 'Food', Icon: Apple, iconClass: 'text-emerald-300' },
+        { key: 'trade_value', label: 'Trade', Icon: TrendingUp, iconClass: 'text-white' },
+        { key: 'alloys', label: 'Alloys', Icon: Hammer, iconClass: 'text-orange-300' },
+        { key: 'consumer_goods', label: 'Consumer Goods', Icon: Boxes, iconClass: 'text-cyan-300' },
+        { key: 'unity', label: 'Unity', Icon: Sparkles, iconClass: 'text-fuchsia-300' },
+        { key: 'research', label: 'Research', Icon: FlaskConical, iconClass: 'text-sky-300' },
+        { key: 'volatile_motes', label: 'Volatile Motes', Icon: Flame, iconClass: 'text-orange-300' },
+        { key: 'rare_crystals', label: 'Rare Crystals', Icon: Gem, iconClass: 'text-pink-300' },
+        { key: 'exotic_gases', label: 'Exotic Gases', Icon: Wind, iconClass: 'text-cyan-300' },
+        { key: 'influence', label: 'Influence', Icon: Crown, iconClass: 'text-yellow-200' },
+        { key: 'dark_matter', label: 'Dark Matter', Icon: Moon, iconClass: 'text-indigo-300' },
+        { key: 'living_metal', label: 'Living Metal', Icon: Magnet, iconClass: 'text-emerald-300' },
+        { key: 'zro', label: 'Zro', Icon: Droplets, iconClass: 'text-violet-300' },
+        { key: 'minor_artifacts', label: 'Minor Artifacts', Icon: Sparkles, iconClass: 'text-amber-300' },
+        { key: 'astral_threads', label: 'Astral Threads', Icon: Wind, iconClass: 'text-teal-300' },
+        { key: 'nanites', label: 'Nanites', Icon: Cpu, iconClass: 'text-slate-200' },
+      ].filter((resource) => shouldShowResource(resource.key, incomeTotals, expenseTotals)),
+    [incomeTotals, expenseTotals]
+  );
 
   const chartData = useMemo(() => {
     return [...snapshots]
@@ -494,77 +543,63 @@ export const CountryDetail: React.FC<CountryDetailProps> = ({ country }) => {
             >
               Economy
             </button>
+            <button
+              type="button"
+              onClick={() => setEmpireTab('military')}
+              className={`rounded-md border px-3 py-1.5 text-sm font-semibold transition ${
+                empireTab === 'military'
+                  ? 'border-border bg-primary text-primary-foreground'
+                  : 'border-border bg-background text-foreground hover:bg-muted/40'
+              }`}
+            >
+              Military
+            </button>
           </div>
           {empireTab === 'overview' && (
             <>
               <h2 className="mb-3 text-xl font-semibold">Monthly Net Resources</h2>
-              {(() => {
-                const resourceCards = [
-                  { key: 'energy', label: 'Energy Credits', Icon: Zap, iconClass: 'text-yellow-300' },
-                  { key: 'minerals', label: 'Minerals', Icon: Gem, iconClass: 'text-red-400' },
-                  { key: 'food', label: 'Food', Icon: Apple, iconClass: 'text-emerald-300' },
-                  { key: 'trade_value', label: 'Trade', Icon: TrendingUp, iconClass: 'text-white' },
-                  { key: 'alloys', label: 'Alloys', Icon: Hammer, iconClass: 'text-orange-300' },
-                  { key: 'consumer_goods', label: 'Consumer Goods', Icon: Boxes, iconClass: 'text-cyan-300' },
-                  { key: 'unity', label: 'Unity', Icon: Sparkles, iconClass: 'text-fuchsia-300' },
-                  { key: 'research', label: 'Research', Icon: FlaskConical, iconClass: 'text-sky-300' },
-                  { key: 'volatile_motes', label: 'Volatile Motes', Icon: Flame, iconClass: 'text-orange-300' },
-                  { key: 'rare_crystals', label: 'Rare Crystals', Icon: Gem, iconClass: 'text-pink-300' },
-                  { key: 'exotic_gases', label: 'Exotic Gases', Icon: Wind, iconClass: 'text-cyan-300' },
-                  { key: 'influence', label: 'Influence', Icon: Crown, iconClass: 'text-yellow-200' },
-                  { key: 'dark_matter', label: 'Dark Matter', Icon: Moon, iconClass: 'text-indigo-300' },
-                  { key: 'living_metal', label: 'Living Metal', Icon: Magnet, iconClass: 'text-emerald-300' },
-                  { key: 'zro', label: 'Zro', Icon: Droplets, iconClass: 'text-violet-300' },
-                  { key: 'minor_artifacts', label: 'Minor Artifacts', Icon: Sparkles, iconClass: 'text-amber-300' },
-                  { key: 'astral_threads', label: 'Astral Threads', Icon: Wind, iconClass: 'text-teal-300' },
-                  { key: 'nanites', label: 'Nanites', Icon: Cpu, iconClass: 'text-slate-200' },
-                ].filter((resource) => shouldShowResource(resource.key, incomeTotals, expenseTotals));
-
-                if (resourceCards.length === 0) return null;
-
-                return (
-                  <div className="mb-6 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-                    {resourceCards.map((resource) => {
-                      const value = resolveResource(netTotals, resource.key);
-                      const prevValue = resolveResource(previousNetTotals, resource.key);
-                      const deltaValue = value - prevValue;
-                      const deltaPct =
-                        prevValue === 0 ? null : ((value - prevValue) / Math.abs(prevValue)) * 100;
-                      const deltaClass = deltaValue >= 0 ? 'text-emerald-300' : 'text-red-400';
-                      return (
-                        <Card
-                          key={`${resource.key}-compact`}
-                          className="border-border bg-gradient-to-b from-[#121212] to-[#0e0e0e] shadow-sm"
-                        >
-                          <CardContent className="flex items-center justify-between gap-3 p-3">
-                            <div className="flex items-center gap-2">
-                              <div className="rounded-md bg-black/40 p-2">
-                                <resource.Icon className={`h-4 w-4 ${resource.iconClass}`} />
-                              </div>
-                              <div className="flex flex-col">
-                                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                  {resource.label}
-                                </span>
-                                <span
-                                  className={`text-sm font-semibold ${
-                                    value >= 0 ? 'text-emerald-400' : 'text-red-400'
-                                  }`}
-                                >
-                                  {formatSigned(value)}
-                                </span>
-                              </div>
+              {resourceCards.length === 0 ? null : (
+                <div className="mb-6 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+                  {resourceCards.map((resource) => {
+                    const value = resolveResource(netTotals, resource.key);
+                    const prevValue = resolveResource(previousNetTotals, resource.key);
+                    const deltaValue = value - prevValue;
+                    const deltaPct =
+                      prevValue === 0 ? null : ((value - prevValue) / Math.abs(prevValue)) * 100;
+                    const deltaClass = deltaValue >= 0 ? 'text-emerald-300' : 'text-red-400';
+                    return (
+                      <Card
+                        key={`${resource.key}-compact`}
+                        className="border-border bg-gradient-to-b from-[#121212] to-[#0e0e0e] shadow-sm"
+                      >
+                        <CardContent className="flex items-center justify-between gap-3 p-3">
+                          <div className="flex items-center gap-2">
+                            <div className="rounded-md bg-black/40 p-2">
+                              <resource.Icon className={`h-4 w-4 ${resource.iconClass}`} />
                             </div>
-                            <div className={`text-xs font-semibold ${deltaClass}`}>
-                              {formatSigned(deltaValue)}
-                              {deltaPct === null ? '' : ` (${formatDelta(deltaPct)})`}
+                            <div className="flex flex-col">
+                              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                {resource.label}
+                              </span>
+                              <span
+                                className={`text-sm font-semibold ${
+                                  value >= 0 ? 'text-emerald-400' : 'text-red-400'
+                                }`}
+                              >
+                                {formatSigned(value)}
+                              </span>
                             </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
+                          </div>
+                          <div className={`text-xs font-semibold ${deltaClass}`}>
+                            {formatSigned(deltaValue)}
+                            {deltaPct === null ? '' : ` (${formatDelta(deltaPct)})`}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
               <h2 className="mb-3 text-xl font-semibold">Population Demographics</h2>
           <div className="mb-6 grid gap-4 lg:grid-cols-2">
             <Card className="border-border">
@@ -711,154 +746,173 @@ export const CountryDetail: React.FC<CountryDetailProps> = ({ country }) => {
           {empireTab === 'economy' && (
             <>
               <h2 className="mb-3 text-xl font-semibold">Monthly Net Resources</h2>
-              {(() => {
-                const resourceCards = [
-                  { key: 'energy', label: 'Energy Credits', Icon: Zap, iconClass: 'text-yellow-300' },
-                  { key: 'minerals', label: 'Minerals', Icon: Gem, iconClass: 'text-red-400' },
-                  { key: 'food', label: 'Food', Icon: Apple, iconClass: 'text-emerald-300' },
-                  { key: 'trade_value', label: 'Trade', Icon: TrendingUp, iconClass: 'text-white' },
-                  { key: 'alloys', label: 'Alloys', Icon: Hammer, iconClass: 'text-orange-300' },
-                  { key: 'consumer_goods', label: 'Consumer Goods', Icon: Boxes, iconClass: 'text-cyan-300' },
-                  { key: 'unity', label: 'Unity', Icon: Sparkles, iconClass: 'text-fuchsia-300' },
-                  { key: 'research', label: 'Research', Icon: FlaskConical, iconClass: 'text-sky-300' },
-                  { key: 'volatile_motes', label: 'Volatile Motes', Icon: Flame, iconClass: 'text-orange-300' },
-                  { key: 'rare_crystals', label: 'Rare Crystals', Icon: Gem, iconClass: 'text-pink-300' },
-                  { key: 'exotic_gases', label: 'Exotic Gases', Icon: Wind, iconClass: 'text-cyan-300' },
-                  { key: 'influence', label: 'Influence', Icon: Crown, iconClass: 'text-yellow-200' },
-                  { key: 'dark_matter', label: 'Dark Matter', Icon: Moon, iconClass: 'text-indigo-300' },
-                  { key: 'living_metal', label: 'Living Metal', Icon: Magnet, iconClass: 'text-emerald-300' },
-                  { key: 'zro', label: 'Zro', Icon: Droplets, iconClass: 'text-violet-300' },
-                  { key: 'minor_artifacts', label: 'Minor Artifacts', Icon: Sparkles, iconClass: 'text-amber-300' },
-                  { key: 'astral_threads', label: 'Astral Threads', Icon: Wind, iconClass: 'text-teal-300' },
-                  { key: 'nanites', label: 'Nanites', Icon: Cpu, iconClass: 'text-slate-200' },
-                ].filter((resource) => shouldShowResource(resource.key, incomeTotals, expenseTotals));
-
-                if (resourceCards.length === 0) return null;
-
-                return (
-                  <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                    {resourceCards.map((resource) => {
-                      const value = resolveResource(netTotals, resource.key);
-                      const incomeValue = resolveResource(incomeTotals, resource.key);
-                      const expenseValue = resolveResource(expenseTotals, resource.key);
-                      const prevIncomeValue = resolveResource(previousIncomeTotals, resource.key);
-                      const prevExpenseValue = resolveResource(previousExpenseTotals, resource.key);
-                      const prevValue = resolveResource(previousNetTotals, resource.key);
-                      const deltaPct =
-                        prevValue === 0 ? null : ((value - prevValue) / Math.abs(prevValue)) * 100;
-                      const deltaValue = value - prevValue;
-                      const valueClass = value >= 0 ? 'text-emerald-400' : 'text-red-400';
-                      const deltaClass = deltaValue >= 0 ? 'text-emerald-300' : 'text-red-400';
-                      const DeltaIcon = deltaValue >= 0 ? ChevronUp : ChevronDown;
-                      const expenseNetValue = Math.abs(expenseValue);
-                      const prevExpenseNetValue = Math.abs(prevExpenseValue);
-                      const incomeDeltaValue = incomeValue - prevIncomeValue;
-                      const expenseDeltaValue = expenseNetValue - prevExpenseNetValue;
-                      const incomeDeltaPct =
-                        prevIncomeValue === 0
-                          ? null
-                          : (incomeDeltaValue / Math.abs(prevIncomeValue)) * 100;
-                      const expenseDeltaPct =
-                        prevExpenseNetValue === 0
-                          ? null
-                          : (expenseDeltaValue / Math.abs(prevExpenseNetValue)) * 100;
-                      const incomeDeltaClass = incomeDeltaValue >= 0 ? 'text-emerald-300' : 'text-red-400';
-                      const expenseDeltaClass = expenseDeltaValue >= 0 ? 'text-red-400' : 'text-emerald-300';
-                      const researchIncome =
-                        resource.key === 'research' ? getResearchBreakdown(incomeTotals) : null;
-                      const researchPrevIncome =
-                        resource.key === 'research' ? getResearchBreakdown(previousIncomeTotals) : null;
-                      return (
-                        <Card
-                          key={resource.key}
-                          className="border-border bg-gradient-to-b from-[#151515] to-[#0f0f0f] shadow-md"
-                        >
-                          <CardContent className="space-y-4 p-4">
-                            <div className="flex items-center justify-between">
-                              <div className="rounded-lg bg-black/40 p-2">
-                                <resource.Icon className={`h-4 w-4 ${resource.iconClass}`} />
+              <div className="mb-4 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                <span className="text-xs font-semibold uppercase tracking-wide text-foreground">
+                  Overview Resources
+                </span>
+                <select
+                  value={economyFilter}
+                  onChange={(event) => setEconomyFilter(event.target.value)}
+                  className="rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground"
+                >
+                  <option value="all">All Resources</option>
+                  {resourceCards.map((resource) => (
+                    <option key={resource.key} value={resource.key}>
+                      {resource.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {resourceCards.length === 0 ? null : (
+                <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  {resourceCards
+                    .filter((resource) => economyFilter === 'all' || resource.key === economyFilter)
+                    .map((resource) => {
+                    const netValue = resolveResource(netTotals, resource.key);
+                    const stockpileValue = resolveResource(stockpileTotals, resource.key);
+                    const prevStockpileValue = resolveResource(previousStockpileTotals, resource.key);
+                    const incomeValue = resolveResource(incomeTotals, resource.key);
+                    const expenseValue = resolveResource(expenseTotals, resource.key);
+                    const prevIncomeValue = resolveResource(previousIncomeTotals, resource.key);
+                    const prevExpenseValue = resolveResource(previousExpenseTotals, resource.key);
+                    const prevValue = resolveResource(previousNetTotals, resource.key);
+                    const deltaPct =
+                      prevValue === 0 ? null : ((netValue - prevValue) / Math.abs(prevValue)) * 100;
+                    const deltaValue = netValue - prevValue;
+                    const netValueClass = netValue >= 0 ? 'text-emerald-400' : 'text-red-400';
+                    const deltaClass = deltaValue >= 0 ? 'text-emerald-300' : 'text-red-400';
+                    const DeltaIcon = deltaValue >= 0 ? ChevronUp : ChevronDown;
+                    const stockpileDelta = stockpileValue - prevStockpileValue;
+                    const stockpileDeltaPct =
+                      prevStockpileValue === 0
+                        ? null
+                        : (stockpileDelta / Math.abs(prevStockpileValue)) * 100;
+                    const stockpileDeltaClass = stockpileDelta >= 0 ? 'text-emerald-300' : 'text-red-400';
+                    const expenseNetValue = Math.abs(expenseValue);
+                    const prevExpenseNetValue = Math.abs(prevExpenseValue);
+                    const incomeDeltaValue = incomeValue - prevIncomeValue;
+                    const expenseDeltaValue = expenseNetValue - prevExpenseNetValue;
+                    const incomeDeltaPct =
+                      prevIncomeValue === 0
+                        ? null
+                        : (incomeDeltaValue / Math.abs(prevIncomeValue)) * 100;
+                    const expenseDeltaPct =
+                      prevExpenseNetValue === 0
+                        ? null
+                        : (expenseDeltaValue / Math.abs(prevExpenseNetValue)) * 100;
+                    const incomeDeltaClass = incomeDeltaValue >= 0 ? 'text-emerald-300' : 'text-red-400';
+                    const expenseDeltaClass = expenseDeltaValue >= 0 ? 'text-red-400' : 'text-emerald-300';
+                    const researchIncome =
+                      resource.key === 'research' ? getResearchBreakdown(incomeTotals) : null;
+                    const researchPrevIncome =
+                      resource.key === 'research' ? getResearchBreakdown(previousIncomeTotals) : null;
+                    return (
+                      <Card
+                        key={resource.key}
+                        className="border-border bg-gradient-to-b from-[#151515] to-[#0f0f0f] shadow-md"
+                      >
+                        <CardContent className="space-y-4 p-4">
+                          <div className="flex items-center gap-3">
+                            <div className="rounded-lg bg-black/40 p-2">
+                              <resource.Icon className={`h-4 w-4 ${resource.iconClass}`} />
+                            </div>
+                            <div className="text-lg font-semibold text-foreground">{resource.label}</div>
+                          </div>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div>
+                              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Stockpile
                               </div>
-                              {deltaPct === null ? (
-                                <span className="text-xs text-muted-foreground"></span>
-                              ) : (
-                                <div className={`flex items-center gap-1 text-xs font-semibold ${deltaClass}`}>
-                                  <span>
-                                    {formatDelta(deltaPct)}
-                                    {` (${formatSigned(deltaValue)})`}
-                                  </span>
-                                  <DeltaIcon className="h-3.5 w-3.5" />
+                              <div className="text-2xl font-semibold text-foreground">
+                                {formatCompact(stockpileValue)}
+                              </div>
+                              {stockpileDeltaPct === null ? null : (
+                                <div className={`text-xs font-semibold ${stockpileDeltaClass}`}>
+                                  {formatSigned(stockpileDelta)} ({formatDelta(stockpileDeltaPct)})
                                 </div>
                               )}
                             </div>
                             <div>
-                              <div className={`text-2xl font-semibold ${valueClass}`}>{formatSigned(value)}</div>
-                              <div className="text-xs text-muted-foreground">{resource.label}</div>
-                            </div>
-                            <div className="space-y-1 text-xs text-muted-foreground">
-                              {resource.key === 'research' && researchIncome && researchPrevIncome ? (
-                                <>
-                                  {[
-                                    { key: 'physics', label: 'Physics' },
-                                    { key: 'society', label: 'Society' },
-                                    { key: 'engineering', label: 'Engineering' },
-                                  ].map((line) => {
-                                    const current =
-                                      researchIncome[line.key as 'physics' | 'society' | 'engineering'];
-                                    const previous =
-                                      researchPrevIncome[line.key as 'physics' | 'society' | 'engineering'];
-                                    const deltaValue = current - previous;
-                                    const deltaPct =
-                                      previous === 0 ? null : (deltaValue / Math.abs(previous)) * 100;
-                                    const deltaClass = deltaValue >= 0 ? 'text-emerald-300' : 'text-red-400';
-                                    return (
-                                      <div key={line.key} className="flex items-center justify-between">
-                                        <span>{line.label}</span>
-                                        <span className="font-semibold text-emerald-300">
-                                          {formatCompact(current)}
-                                          {deltaPct === null ? '' : (
-                                            <span className={`ml-1 ${deltaClass}`}>
-                                              ({formatSigned(deltaValue)}, {formatDelta(deltaPct)})
-                                            </span>
-                                          )}
-                                        </span>
-                                      </div>
-                                    );
-                                  })}
-                                </>
-                              ) : (
-                                <div className="flex items-center justify-between">
-                                  <span>Gross Income</span>
-                                  <span className="font-semibold text-emerald-300">
-                                    {formatCompact(incomeValue)}
-                                    {incomeDeltaPct === null ? '' : (
-                                      <span className={`ml-1 ${incomeDeltaClass}`}>
-                                        ({formatSigned(incomeDeltaValue)}, {formatDelta(incomeDeltaPct)})
-                                      </span>
-                                    )}
-                                  </span>
-                                </div>
-                              )}
-                              {resource.key === 'research' ? null : (
-                                <div className="flex items-center justify-between">
-                                  <span>Net Expenses</span>
-                                  <span className="font-semibold text-red-400">
-                                    {formatCompact(expenseNetValue)}
-                                    {expenseDeltaPct === null ? '' : (
-                                      <span className={`ml-1 ${expenseDeltaClass}`}>
-                                        ({formatSigned(expenseDeltaValue)}, {formatDelta(expenseDeltaPct)})
-                                      </span>
-                                    )}
-                                  </span>
+                              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Monthly
+                              </div>
+                              <div className={`text-2xl font-semibold ${netValueClass}`}>
+                                {formatSigned(netValue)}
+                              </div>
+                              {deltaPct === null ? null : (
+                                <div className={`text-xs font-semibold ${deltaClass}`}>
+                                  {formatSigned(deltaValue)} ({formatDelta(deltaPct)})
                                 </div>
                               )}
                             </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
+                            <div className="text-sm text-muted-foreground sm:col-span-2">
+                              &nbsp;
+                            </div>
+                          </div>
+                          <div className="space-y-1 text-xs text-muted-foreground">
+                            {resource.key === 'research' && researchIncome && researchPrevIncome ? (
+                              <>
+                                {[
+                                  { key: 'physics', label: 'Physics' },
+                                  { key: 'society', label: 'Society' },
+                                  { key: 'engineering', label: 'Engineering' },
+                                ].map((line) => {
+                                  const current =
+                                    researchIncome[line.key as 'physics' | 'society' | 'engineering'];
+                                  const previous =
+                                    researchPrevIncome[line.key as 'physics' | 'society' | 'engineering'];
+                                  const deltaValue = current - previous;
+                                  const deltaPct =
+                                    previous === 0 ? null : (deltaValue / Math.abs(previous)) * 100;
+                                  const deltaClass = deltaValue >= 0 ? 'text-emerald-300' : 'text-red-400';
+                                  return (
+                                    <div key={line.key} className="flex items-center justify-between">
+                                      <span>{line.label}</span>
+                                      <span className="font-semibold text-emerald-300">
+                                        {formatCompact(current)}
+                                        {deltaPct === null ? '' : (
+                                          <span className={`ml-1 ${deltaClass}`}>
+                                            ({formatSigned(deltaValue)}, {formatDelta(deltaPct)})
+                                          </span>
+                                        )}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </>
+                            ) : (
+                              <div className="flex items-center justify-between">
+                                <span>Gross Income</span>
+                                <span className="font-semibold text-emerald-300">
+                                  {formatCompact(incomeValue)}
+                                  {incomeDeltaPct === null ? '' : (
+                                    <span className={`ml-1 ${incomeDeltaClass}`}>
+                                      ({formatSigned(incomeDeltaValue)}, {formatDelta(incomeDeltaPct)})
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                            )}
+                            {resource.key === 'research' ? null : (
+                              <div className="flex items-center justify-between">
+                                <span>Net Expenses</span>
+                                <span className="font-semibold text-red-400">
+                                  {formatCompact(expenseNetValue)}
+                                  {expenseDeltaPct === null ? '' : (
+                                    <span className={`ml-1 ${expenseDeltaClass}`}>
+                                      ({formatSigned(expenseDeltaValue)}, {formatDelta(expenseDeltaPct)})
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
               <Separator className="my-6" />
               <h2 className="mb-4 text-xl font-semibold">Budget Analysis</h2>
               <div className="grid gap-8 lg:grid-cols-2">
@@ -901,6 +955,11 @@ export const CountryDetail: React.FC<CountryDetailProps> = ({ country }) => {
                   ))}
                 </div>
               </div>
+            </>
+          )}
+          {empireTab === 'military' && (
+            <>
+              <h2 className="mb-3 text-xl font-semibold">Military</h2>
             </>
           )}
           <Separator className="my-6" />

@@ -249,6 +249,17 @@ app.MapPost("/api/saves/upload", async (HttpRequest request, IFormFile file, Sav
 
         await db.SaveChangesAsync();
 
+        foreach (var item in result.ResourceStockpiles)
+        {
+            if (snapshotIdByCountryId.TryGetValue(item.CountryId, out var snapshotId))
+            {
+                item.SnapshotId = snapshotId;
+                db.ResourceStockpiles.Add(item);
+            }
+        }
+
+        await db.SaveChangesAsync();
+
         foreach (var species in result.SpeciesPopulations)
         {
             if (snapshotIdByCountryId.TryGetValue(species.CountryId, out var snapshotId))
@@ -332,6 +343,9 @@ BEGIN
     END IF;
     IF to_regclass('public.""WarStatuses""') IS NOT NULL THEN
         EXECUTE 'TRUNCATE TABLE ""WarStatuses"" RESTART IDENTITY CASCADE';
+    END IF;
+    IF to_regclass('public.""ResourceStockpiles""') IS NOT NULL THEN
+        EXECUTE 'TRUNCATE TABLE ""ResourceStockpiles"" RESTART IDENTITY CASCADE';
     END IF;
     EXECUTE 'TRUNCATE TABLE ""BudgetLineItems"", ""Snapshots"", ""Countries"" RESTART IDENTITY CASCADE';
 END $$;");
@@ -564,6 +578,16 @@ app.MapGet("/api/snapshots/{id}/budget", async (int id, AppDbContext db) =>
         .ToListAsync();
 })
 .WithName("GetSnapshotBudget")
+.WithOpenApi();
+
+// Get stockpile data for a snapshot
+app.MapGet("/api/snapshots/{id}/stockpile", async (int id, AppDbContext db) =>
+{
+    return await db.ResourceStockpiles
+        .Where(r => r.SnapshotId == id)
+        .ToListAsync();
+})
+.WithName("GetSnapshotStockpile")
 .WithOpenApi();
 
 // Get species breakdown for a snapshot
