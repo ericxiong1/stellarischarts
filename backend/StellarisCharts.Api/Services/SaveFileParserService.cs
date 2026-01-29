@@ -57,6 +57,9 @@ public class SaveFileParserService
                 }
             }
 
+            var wars = ParseWars(content, result.GameDate, countryNameById, countryAdjectiveById);
+            result.Wars.AddRange(wars);
+
             foreach (var country in result.Countries)
             {
                 if (!string.IsNullOrWhiteSpace(country.SubjectStatus))
@@ -719,6 +722,137 @@ public class SaveFileParserService
         return value.Replace('_', ' ');
     }
 
+    private List<ParsedWar> ParseWars(
+        string content,
+        string gameDate,
+        Dictionary<int, string> countryNameById,
+        Dictionary<int, string> countryAdjectiveById)
+    {
+        var result = new List<ParsedWar>();
+        if (!TryExtractTopLevelBlock(content, "war", out var warsContent))
+            return result;
+
+        foreach (var (warId, warData) in ExtractIdBlocks(warsContent))
+        {
+            var attackers = ExtractWarSideCountries(warData, "attackers");
+            var defenders = ExtractWarSideCountries(warData, "defenders");
+            if (attackers.Count == 0 && defenders.Count == 0)
+                continue;
+
+            var attackerExhaustion = ExtractLastDecimal(warData, @"attacker_war_exhaustion=([0-9.]+)");
+            var defenderExhaustion = ExtractLastDecimal(warData, @"defender_war_exhaustion=([0-9.]+)");
+            var startDate = ExtractStringValue(warData, @"start_date=\s*""([^""]+)""") ?? string.Empty;
+
+            var attackerLabel = BuildWarSideLabel(attackers, countryNameById);
+            var defenderLabel = BuildWarSideLabel(defenders, countryNameById);
+
+            var warName = BuildWarName(attackerLabel, defenderLabel);
+
+            var warLength = BuildWarLength(gameDate, startDate);
+
+            result.Add(new ParsedWar(
+                warId,
+                attackerLabel,
+                defenderLabel,
+                warName,
+                startDate,
+                warLength,
+                attackerExhaustion,
+                defenderExhaustion,
+                attackers,
+                defenders
+            ));
+        }
+
+        return result;
+    }
+
+    private List<int> ExtractWarSideCountries(string warData, string key)
+    {
+        if (!TryExtractInlineBlock(warData, key, out var block))
+            return new List<int>();
+
+        var matches = Regex.Matches(block, @"country=(\d+)");
+        return matches
+            .Select(m => int.TryParse(m.Groups[1].Value, out var id) ? id : 0)
+            .Where(id => id != 0)
+            .Distinct()
+            .ToList();
+    }
+
+    private decimal ExtractLastDecimal(string content, string pattern)
+    {
+        var matches = Regex.Matches(content, pattern, RegexOptions.Multiline);
+        if (matches.Count == 0)
+            return 0m;
+
+        var value = matches[^1].Groups[1].Value;
+        return decimal.TryParse(value, out var parsed) ? parsed : 0m;
+    }
+
+    private string BuildWarSideLabel(List<int> ids, Dictionary<int, string> namesById)
+    {
+        if (ids.Count == 0)
+            return string.Empty;
+
+        var names = ids
+            .Select(id => namesById.TryGetValue(id, out var name) ? name : $"Country {id}")
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return string.Join(", ", names);
+    }
+
+    private string BuildWarName(string attacker, string defender)
+    {
+        if (string.IsNullOrWhiteSpace(attacker) || string.IsNullOrWhiteSpace(defender))
+            return string.Empty;
+
+        return $"{attacker} vs {defender}";
+    }
+
+    private string BuildWarLength(string currentDate, string startDate)
+    {
+        if (!TryParseGameDate(currentDate, out var current) || !TryParseGameDate(startDate, out var start))
+            return string.Empty;
+
+        var months = (current.Year - start.Year) * 12 + (current.Month - start.Month);
+        if (current.Day < start.Day)
+            months -= 1;
+        if (months < 0)
+            months = 0;
+
+        var years = months / 12;
+        var remMonths = months % 12;
+        return years > 0 ? $"{years}y {remMonths}m" : $"{remMonths}m";
+    }
+
+    private bool TryParseGameDate(string value, out DateTime date)
+    {
+        date = default;
+        var match = Regex.Match(value, @"^(\d{4})\.(\d{2})\.(\d{2})$");
+        if (!match.Success)
+            return false;
+
+        if (!int.TryParse(match.Groups[1].Value, out var year) ||
+            !int.TryParse(match.Groups[2].Value, out var month) ||
+            !int.TryParse(match.Groups[3].Value, out var day))
+        {
+            return false;
+        }
+
+        try
+        {
+            date = new DateTime(year, month, day);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+
     private bool ShouldExcludeByName(string name)
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -1076,12 +1210,25 @@ public class SaveFileParserService
     }
 }
 
+public record ParsedWar(
+    int WarId,
+    string Attackers,
+    string Defenders,
+    string WarName,
+    string WarStartDate,
+    string WarLength,
+    decimal AttackerWarExhaustion,
+    decimal DefenderWarExhaustion,
+    List<int> AttackerIds,
+    List<int> DefenderIds);
+
 public class ParseResult
 {
     public List<Country> Countries { get; set; } = new();
     public List<BudgetLineItem> BudgetLineItems { get; set; } = new();
     public List<SpeciesPopulation> SpeciesPopulations { get; set; } = new();
     public List<GlobalSpeciesPopulation> GlobalSpeciesPopulations { get; set; } = new();
+    public List<ParsedWar> Wars { get; set; } = new();
     public string GameDate { get; set; } = "Unknown";
     public int Tick { get; set; }
 }

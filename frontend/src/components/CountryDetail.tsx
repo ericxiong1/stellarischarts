@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../api';
-import type { Country, Snapshot, BudgetLineItem, SpeciesBreakdown } from '../api';
+import type { Country, Snapshot, BudgetLineItem, SpeciesBreakdown, WarStatus } from '../api';
 import {
   LineChart,
   Line,
@@ -50,7 +50,9 @@ export const CountryDetail: React.FC<CountryDetailProps> = ({ country }) => {
   const [speciesBreakdown, setSpeciesBreakdown] = useState<SpeciesBreakdown[]>([]);
   const [previousSpeciesBreakdown, setPreviousSpeciesBreakdown] = useState<SpeciesBreakdown[]>([]);
   const [speciesHistory, setSpeciesHistory] = useState<Map<number, SpeciesBreakdown[]>>(new Map());
+  const [warStatuses, setWarStatuses] = useState<WarStatus[]>([]);
   const [loading, setLoading] = useState(false);
+  const [empireTab, setEmpireTab] = useState<'overview' | 'economy'>('overview');
 
   useEffect(() => {
     if (!country) return;
@@ -71,6 +73,25 @@ export const CountryDetail: React.FC<CountryDetailProps> = ({ country }) => {
     };
 
     fetchSnapshots();
+  }, [country]);
+
+  useEffect(() => {
+    if (!country) {
+      setWarStatuses([]);
+      return;
+    }
+
+    const fetchWars = async () => {
+      try {
+        const wars = await api.getCountryWars(country.countryId);
+        setWarStatuses(wars);
+      } catch (err) {
+        console.error('Failed to fetch wars:', err);
+        setWarStatuses([]);
+      }
+    };
+
+    fetchWars();
   }, [country]);
 
   useEffect(() => {
@@ -362,6 +383,41 @@ export const CountryDetail: React.FC<CountryDetailProps> = ({ country }) => {
                   ))}
                 </div>
               )}
+              {warStatuses.length > 0 && (
+                <div className="mt-4">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-foreground">
+                    Current Wars
+                  </div>
+                  <div className="mt-2 space-y-2 text-xs text-muted-foreground">
+                    {warStatuses.map((war) => (
+                      <div key={war.id} className="rounded-md border border-border bg-black/20 p-2">
+                        <div className="text-sm font-semibold text-foreground">
+                          {war.warName || 'War'}
+                        </div>
+                        <div className="mt-1 text-[11px] text-muted-foreground">
+                          {war.warLength ? `Length: ${war.warLength}` : null}
+                          {war.warStartDate ? ` - Started: ${war.warStartDate}` : null}
+                        </div>
+                        <div className="mt-2 grid items-center gap-2 text-[11px] text-foreground sm:grid-cols-[1fr_auto_1fr]">
+                          <div className="flex items-center gap-2">
+                            <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-red-300">
+                              {formatWarPercent(war.attackerWarExhaustion)}
+                            </span>
+                            <span className="font-medium">{war.attackers}</span>
+                          </div>
+                          <div className="hidden text-center text-muted-foreground sm:block">vs</div>
+                          <div className="flex items-center justify-end gap-2">
+                            <span className="font-medium text-right">{war.defenders}</span>
+                            <span className="rounded bg-blue-500/15 px-1.5 py-0.5 text-blue-300">
+                              {formatWarPercent(war.defenderWarExhaustion)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="flex w-full flex-col gap-4 lg:w-auto lg:min-w-[360px]">
               <div className="text-right text-sm font-semibold text-foreground">{country.name}</div>
@@ -415,156 +471,101 @@ export const CountryDetail: React.FC<CountryDetailProps> = ({ country }) => {
         <p className="text-muted-foreground">Loading data...</p>
       ) : snapshots.length > 0 ? (
         <div>
-          <h2 className="mb-3 text-xl font-semibold">Monthly Net Resources</h2>
-          {(() => {
-            const resourceCards = [
-              { key: 'energy', label: 'Energy Credits', Icon: Zap, iconClass: 'text-yellow-300' },
-              { key: 'minerals', label: 'Minerals', Icon: Gem, iconClass: 'text-red-400' },
-              { key: 'food', label: 'Food', Icon: Apple, iconClass: 'text-emerald-300' },
-              { key: 'trade_value', label: 'Trade', Icon: TrendingUp, iconClass: 'text-white' },
-              { key: 'alloys', label: 'Alloys', Icon: Hammer, iconClass: 'text-orange-300' },
-              { key: 'consumer_goods', label: 'Consumer Goods', Icon: Boxes, iconClass: 'text-cyan-300' },
-              { key: 'unity', label: 'Unity', Icon: Sparkles, iconClass: 'text-fuchsia-300' },
-              { key: 'research', label: 'Research', Icon: FlaskConical, iconClass: 'text-sky-300' },
-              { key: 'volatile_motes', label: 'Volatile Motes', Icon: Flame, iconClass: 'text-orange-300' },
-              { key: 'rare_crystals', label: 'Rare Crystals', Icon: Gem, iconClass: 'text-pink-300' },
-              { key: 'exotic_gases', label: 'Exotic Gases', Icon: Wind, iconClass: 'text-cyan-300' },
-              { key: 'influence', label: 'Influence', Icon: Crown, iconClass: 'text-yellow-200' },
-              { key: 'dark_matter', label: 'Dark Matter', Icon: Moon, iconClass: 'text-indigo-300' },
-              { key: 'living_metal', label: 'Living Metal', Icon: Magnet, iconClass: 'text-emerald-300' },
-              { key: 'zro', label: 'Zro', Icon: Droplets, iconClass: 'text-violet-300' },
-              { key: 'minor_artifacts', label: 'Minor Artifacts', Icon: Sparkles, iconClass: 'text-amber-300' },
-              { key: 'astral_threads', label: 'Astral Threads', Icon: Wind, iconClass: 'text-teal-300' },
-              { key: 'nanites', label: 'Nanites', Icon: Cpu, iconClass: 'text-slate-200' },
-            ].filter((resource) => shouldShowResource(resource.key, incomeTotals, expenseTotals));
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setEmpireTab('overview')}
+              className={`rounded-md border px-3 py-1.5 text-sm font-semibold transition ${
+                empireTab === 'overview'
+                  ? 'border-border bg-primary text-primary-foreground'
+                  : 'border-border bg-background text-foreground hover:bg-muted/40'
+              }`}
+            >
+              Overview
+            </button>
+            <button
+              type="button"
+              onClick={() => setEmpireTab('economy')}
+              className={`rounded-md border px-3 py-1.5 text-sm font-semibold transition ${
+                empireTab === 'economy'
+                  ? 'border-border bg-primary text-primary-foreground'
+                  : 'border-border bg-background text-foreground hover:bg-muted/40'
+              }`}
+            >
+              Economy
+            </button>
+          </div>
+          {empireTab === 'overview' && (
+            <>
+              <h2 className="mb-3 text-xl font-semibold">Monthly Net Resources</h2>
+              {(() => {
+                const resourceCards = [
+                  { key: 'energy', label: 'Energy Credits', Icon: Zap, iconClass: 'text-yellow-300' },
+                  { key: 'minerals', label: 'Minerals', Icon: Gem, iconClass: 'text-red-400' },
+                  { key: 'food', label: 'Food', Icon: Apple, iconClass: 'text-emerald-300' },
+                  { key: 'trade_value', label: 'Trade', Icon: TrendingUp, iconClass: 'text-white' },
+                  { key: 'alloys', label: 'Alloys', Icon: Hammer, iconClass: 'text-orange-300' },
+                  { key: 'consumer_goods', label: 'Consumer Goods', Icon: Boxes, iconClass: 'text-cyan-300' },
+                  { key: 'unity', label: 'Unity', Icon: Sparkles, iconClass: 'text-fuchsia-300' },
+                  { key: 'research', label: 'Research', Icon: FlaskConical, iconClass: 'text-sky-300' },
+                  { key: 'volatile_motes', label: 'Volatile Motes', Icon: Flame, iconClass: 'text-orange-300' },
+                  { key: 'rare_crystals', label: 'Rare Crystals', Icon: Gem, iconClass: 'text-pink-300' },
+                  { key: 'exotic_gases', label: 'Exotic Gases', Icon: Wind, iconClass: 'text-cyan-300' },
+                  { key: 'influence', label: 'Influence', Icon: Crown, iconClass: 'text-yellow-200' },
+                  { key: 'dark_matter', label: 'Dark Matter', Icon: Moon, iconClass: 'text-indigo-300' },
+                  { key: 'living_metal', label: 'Living Metal', Icon: Magnet, iconClass: 'text-emerald-300' },
+                  { key: 'zro', label: 'Zro', Icon: Droplets, iconClass: 'text-violet-300' },
+                  { key: 'minor_artifacts', label: 'Minor Artifacts', Icon: Sparkles, iconClass: 'text-amber-300' },
+                  { key: 'astral_threads', label: 'Astral Threads', Icon: Wind, iconClass: 'text-teal-300' },
+                  { key: 'nanites', label: 'Nanites', Icon: Cpu, iconClass: 'text-slate-200' },
+                ].filter((resource) => shouldShowResource(resource.key, incomeTotals, expenseTotals));
 
-            if (resourceCards.length === 0) return null;
+                if (resourceCards.length === 0) return null;
 
-            return (
-              <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                {resourceCards.map((resource) => {
-                  const value = resolveResource(netTotals, resource.key);
-                  const incomeValue = resolveResource(incomeTotals, resource.key);
-                  const expenseValue = resolveResource(expenseTotals, resource.key);
-                  const prevIncomeValue = resolveResource(previousIncomeTotals, resource.key);
-                  const prevExpenseValue = resolveResource(previousExpenseTotals, resource.key);
-                  const prevValue = resolveResource(previousNetTotals, resource.key);
-                  const deltaPct =
-                    prevValue === 0 ? null : ((value - prevValue) / Math.abs(prevValue)) * 100;
-                  const deltaValue = value - prevValue;
-                  const valueClass = value >= 0 ? 'text-emerald-400' : 'text-red-400';
-                  const deltaClass = deltaValue >= 0 ? 'text-emerald-300' : 'text-red-400';
-                  const DeltaIcon = deltaValue >= 0 ? ChevronUp : ChevronDown;
-                  const expenseNetValue = Math.abs(expenseValue);
-                  const prevExpenseNetValue = Math.abs(prevExpenseValue);
-                  const incomeDeltaValue = incomeValue - prevIncomeValue;
-                  const expenseDeltaValue = expenseNetValue - prevExpenseNetValue;
-                  const incomeDeltaPct =
-                    prevIncomeValue === 0
-                      ? null
-                      : (incomeDeltaValue / Math.abs(prevIncomeValue)) * 100;
-                  const expenseDeltaPct =
-                    prevExpenseNetValue === 0
-                      ? null
-                      : (expenseDeltaValue / Math.abs(prevExpenseNetValue)) * 100;
-                  const incomeDeltaClass = incomeDeltaValue >= 0 ? 'text-emerald-300' : 'text-red-400';
-                  const expenseDeltaClass = expenseDeltaValue >= 0 ? 'text-red-400' : 'text-emerald-300';
-                  const researchIncome =
-                    resource.key === 'research' ? getResearchBreakdown(incomeTotals) : null;
-                  const researchPrevIncome =
-                    resource.key === 'research' ? getResearchBreakdown(previousIncomeTotals) : null;
-                  return (
-                    <Card
-                      key={resource.key}
-                      className="border-border bg-gradient-to-b from-[#151515] to-[#0f0f0f] shadow-md"
-                    >
-                      <CardContent className="space-y-4 p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="rounded-lg bg-black/40 p-2">
-                            <resource.Icon className={`h-4 w-4 ${resource.iconClass}`} />
-                          </div>
-                          {deltaPct === null ? (
-                            <span className="text-xs text-muted-foreground"></span>
-                          ) : (
-                            <div className={`flex items-center gap-1 text-xs font-semibold ${deltaClass}`}>
-                              <span>
-                                {formatDelta(deltaPct)}
-                                {` (${formatSigned(deltaValue)})`}
-                              </span>
-                              <DeltaIcon className="h-3.5 w-3.5" />
+                return (
+                  <div className="mb-6 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+                    {resourceCards.map((resource) => {
+                      const value = resolveResource(netTotals, resource.key);
+                      const prevValue = resolveResource(previousNetTotals, resource.key);
+                      const deltaValue = value - prevValue;
+                      const deltaPct =
+                        prevValue === 0 ? null : ((value - prevValue) / Math.abs(prevValue)) * 100;
+                      const deltaClass = deltaValue >= 0 ? 'text-emerald-300' : 'text-red-400';
+                      return (
+                        <Card
+                          key={`${resource.key}-compact`}
+                          className="border-border bg-gradient-to-b from-[#121212] to-[#0e0e0e] shadow-sm"
+                        >
+                          <CardContent className="flex items-center justify-between gap-3 p-3">
+                            <div className="flex items-center gap-2">
+                              <div className="rounded-md bg-black/40 p-2">
+                                <resource.Icon className={`h-4 w-4 ${resource.iconClass}`} />
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                  {resource.label}
+                                </span>
+                                <span
+                                  className={`text-sm font-semibold ${
+                                    value >= 0 ? 'text-emerald-400' : 'text-red-400'
+                                  }`}
+                                >
+                                  {formatSigned(value)}
+                                </span>
+                              </div>
                             </div>
-                          )}
-                        </div>
-                        <div>
-                          <div className={`text-2xl font-semibold ${valueClass}`}>{formatSigned(value)}</div>
-                          <div className="text-xs text-muted-foreground">{resource.label}</div>
-                        </div>
-                        <div className="space-y-1 text-xs text-muted-foreground">
-                          {resource.key === 'research' && researchIncome && researchPrevIncome ? (
-                            <>
-                              {[
-                                { key: 'physics', label: 'Physics' },
-                                { key: 'society', label: 'Society' },
-                                { key: 'engineering', label: 'Engineering' },
-                              ].map((line) => {
-                                const current =
-                                  researchIncome[line.key as 'physics' | 'society' | 'engineering'];
-                                const previous =
-                                  researchPrevIncome[line.key as 'physics' | 'society' | 'engineering'];
-                                const deltaValue = current - previous;
-                                const deltaPct =
-                                  previous === 0 ? null : (deltaValue / Math.abs(previous)) * 100;
-                                const deltaClass = deltaValue >= 0 ? 'text-emerald-300' : 'text-red-400';
-                                return (
-                                  <div key={line.key} className="flex items-center justify-between">
-                                    <span>{line.label}</span>
-                                    <span className="font-semibold text-emerald-300">
-                                      {formatCompact(current)}
-                                      {deltaPct === null ? '' : (
-                                        <span className={`ml-1 ${deltaClass}`}>
-                                          ({formatSigned(deltaValue)}, {formatDelta(deltaPct)})
-                                        </span>
-                                      )}
-                                    </span>
-                                  </div>
-                                );
-                              })}
-                            </>
-                          ) : (
-                            <div className="flex items-center justify-between">
-                              <span>Gross Income</span>
-                              <span className="font-semibold text-emerald-300">
-                                {formatCompact(incomeValue)}
-                                {incomeDeltaPct === null ? '' : (
-                                  <span className={`ml-1 ${incomeDeltaClass}`}>
-                                    ({formatSigned(incomeDeltaValue)}, {formatDelta(incomeDeltaPct)})
-                                  </span>
-                                )}
-                              </span>
+                            <div className={`text-xs font-semibold ${deltaClass}`}>
+                              {formatSigned(deltaValue)}
+                              {deltaPct === null ? '' : ` (${formatDelta(deltaPct)})`}
                             </div>
-                          )}
-                          {resource.key === 'research' ? null : (
-                            <div className="flex items-center justify-between">
-                              <span>Net Expenses</span>
-                              <span className="font-semibold text-red-400">
-                                {formatCompact(expenseNetValue)}
-                                {expenseDeltaPct === null ? '' : (
-                                  <span className={`ml-1 ${expenseDeltaClass}`}>
-                                    ({formatSigned(expenseDeltaValue)}, {formatDelta(expenseDeltaPct)})
-                                  </span>
-                                )}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            );
-          })()}
-          <h2 className="mb-3 text-xl font-semibold">Population Demographics</h2>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+              <h2 className="mb-3 text-xl font-semibold">Population Demographics</h2>
           <div className="mb-6 grid gap-4 lg:grid-cols-2">
             <Card className="border-border">
               <CardContent className="p-4">
@@ -705,48 +706,204 @@ export const CountryDetail: React.FC<CountryDetailProps> = ({ country }) => {
               </Card>
             </div>
           )}
+            </>
+          )}
+          {empireTab === 'economy' && (
+            <>
+              <h2 className="mb-3 text-xl font-semibold">Monthly Net Resources</h2>
+              {(() => {
+                const resourceCards = [
+                  { key: 'energy', label: 'Energy Credits', Icon: Zap, iconClass: 'text-yellow-300' },
+                  { key: 'minerals', label: 'Minerals', Icon: Gem, iconClass: 'text-red-400' },
+                  { key: 'food', label: 'Food', Icon: Apple, iconClass: 'text-emerald-300' },
+                  { key: 'trade_value', label: 'Trade', Icon: TrendingUp, iconClass: 'text-white' },
+                  { key: 'alloys', label: 'Alloys', Icon: Hammer, iconClass: 'text-orange-300' },
+                  { key: 'consumer_goods', label: 'Consumer Goods', Icon: Boxes, iconClass: 'text-cyan-300' },
+                  { key: 'unity', label: 'Unity', Icon: Sparkles, iconClass: 'text-fuchsia-300' },
+                  { key: 'research', label: 'Research', Icon: FlaskConical, iconClass: 'text-sky-300' },
+                  { key: 'volatile_motes', label: 'Volatile Motes', Icon: Flame, iconClass: 'text-orange-300' },
+                  { key: 'rare_crystals', label: 'Rare Crystals', Icon: Gem, iconClass: 'text-pink-300' },
+                  { key: 'exotic_gases', label: 'Exotic Gases', Icon: Wind, iconClass: 'text-cyan-300' },
+                  { key: 'influence', label: 'Influence', Icon: Crown, iconClass: 'text-yellow-200' },
+                  { key: 'dark_matter', label: 'Dark Matter', Icon: Moon, iconClass: 'text-indigo-300' },
+                  { key: 'living_metal', label: 'Living Metal', Icon: Magnet, iconClass: 'text-emerald-300' },
+                  { key: 'zro', label: 'Zro', Icon: Droplets, iconClass: 'text-violet-300' },
+                  { key: 'minor_artifacts', label: 'Minor Artifacts', Icon: Sparkles, iconClass: 'text-amber-300' },
+                  { key: 'astral_threads', label: 'Astral Threads', Icon: Wind, iconClass: 'text-teal-300' },
+                  { key: 'nanites', label: 'Nanites', Icon: Cpu, iconClass: 'text-slate-200' },
+                ].filter((resource) => shouldShowResource(resource.key, incomeTotals, expenseTotals));
+
+                if (resourceCards.length === 0) return null;
+
+                return (
+                  <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                    {resourceCards.map((resource) => {
+                      const value = resolveResource(netTotals, resource.key);
+                      const incomeValue = resolveResource(incomeTotals, resource.key);
+                      const expenseValue = resolveResource(expenseTotals, resource.key);
+                      const prevIncomeValue = resolveResource(previousIncomeTotals, resource.key);
+                      const prevExpenseValue = resolveResource(previousExpenseTotals, resource.key);
+                      const prevValue = resolveResource(previousNetTotals, resource.key);
+                      const deltaPct =
+                        prevValue === 0 ? null : ((value - prevValue) / Math.abs(prevValue)) * 100;
+                      const deltaValue = value - prevValue;
+                      const valueClass = value >= 0 ? 'text-emerald-400' : 'text-red-400';
+                      const deltaClass = deltaValue >= 0 ? 'text-emerald-300' : 'text-red-400';
+                      const DeltaIcon = deltaValue >= 0 ? ChevronUp : ChevronDown;
+                      const expenseNetValue = Math.abs(expenseValue);
+                      const prevExpenseNetValue = Math.abs(prevExpenseValue);
+                      const incomeDeltaValue = incomeValue - prevIncomeValue;
+                      const expenseDeltaValue = expenseNetValue - prevExpenseNetValue;
+                      const incomeDeltaPct =
+                        prevIncomeValue === 0
+                          ? null
+                          : (incomeDeltaValue / Math.abs(prevIncomeValue)) * 100;
+                      const expenseDeltaPct =
+                        prevExpenseNetValue === 0
+                          ? null
+                          : (expenseDeltaValue / Math.abs(prevExpenseNetValue)) * 100;
+                      const incomeDeltaClass = incomeDeltaValue >= 0 ? 'text-emerald-300' : 'text-red-400';
+                      const expenseDeltaClass = expenseDeltaValue >= 0 ? 'text-red-400' : 'text-emerald-300';
+                      const researchIncome =
+                        resource.key === 'research' ? getResearchBreakdown(incomeTotals) : null;
+                      const researchPrevIncome =
+                        resource.key === 'research' ? getResearchBreakdown(previousIncomeTotals) : null;
+                      return (
+                        <Card
+                          key={resource.key}
+                          className="border-border bg-gradient-to-b from-[#151515] to-[#0f0f0f] shadow-md"
+                        >
+                          <CardContent className="space-y-4 p-4">
+                            <div className="flex items-center justify-between">
+                              <div className="rounded-lg bg-black/40 p-2">
+                                <resource.Icon className={`h-4 w-4 ${resource.iconClass}`} />
+                              </div>
+                              {deltaPct === null ? (
+                                <span className="text-xs text-muted-foreground"></span>
+                              ) : (
+                                <div className={`flex items-center gap-1 text-xs font-semibold ${deltaClass}`}>
+                                  <span>
+                                    {formatDelta(deltaPct)}
+                                    {` (${formatSigned(deltaValue)})`}
+                                  </span>
+                                  <DeltaIcon className="h-3.5 w-3.5" />
+                                </div>
+                              )}
+                            </div>
+                            <div>
+                              <div className={`text-2xl font-semibold ${valueClass}`}>{formatSigned(value)}</div>
+                              <div className="text-xs text-muted-foreground">{resource.label}</div>
+                            </div>
+                            <div className="space-y-1 text-xs text-muted-foreground">
+                              {resource.key === 'research' && researchIncome && researchPrevIncome ? (
+                                <>
+                                  {[
+                                    { key: 'physics', label: 'Physics' },
+                                    { key: 'society', label: 'Society' },
+                                    { key: 'engineering', label: 'Engineering' },
+                                  ].map((line) => {
+                                    const current =
+                                      researchIncome[line.key as 'physics' | 'society' | 'engineering'];
+                                    const previous =
+                                      researchPrevIncome[line.key as 'physics' | 'society' | 'engineering'];
+                                    const deltaValue = current - previous;
+                                    const deltaPct =
+                                      previous === 0 ? null : (deltaValue / Math.abs(previous)) * 100;
+                                    const deltaClass = deltaValue >= 0 ? 'text-emerald-300' : 'text-red-400';
+                                    return (
+                                      <div key={line.key} className="flex items-center justify-between">
+                                        <span>{line.label}</span>
+                                        <span className="font-semibold text-emerald-300">
+                                          {formatCompact(current)}
+                                          {deltaPct === null ? '' : (
+                                            <span className={`ml-1 ${deltaClass}`}>
+                                              ({formatSigned(deltaValue)}, {formatDelta(deltaPct)})
+                                            </span>
+                                          )}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </>
+                              ) : (
+                                <div className="flex items-center justify-between">
+                                  <span>Gross Income</span>
+                                  <span className="font-semibold text-emerald-300">
+                                    {formatCompact(incomeValue)}
+                                    {incomeDeltaPct === null ? '' : (
+                                      <span className={`ml-1 ${incomeDeltaClass}`}>
+                                        ({formatSigned(incomeDeltaValue)}, {formatDelta(incomeDeltaPct)})
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+                              )}
+                              {resource.key === 'research' ? null : (
+                                <div className="flex items-center justify-between">
+                                  <span>Net Expenses</span>
+                                  <span className="font-semibold text-red-400">
+                                    {formatCompact(expenseNetValue)}
+                                    {expenseDeltaPct === null ? '' : (
+                                      <span className={`ml-1 ${expenseDeltaClass}`}>
+                                        ({formatSigned(expenseDeltaValue)}, {formatDelta(expenseDeltaPct)})
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+              <Separator className="my-6" />
+              <h2 className="mb-4 text-xl font-semibold">Budget Analysis</h2>
+              <div className="grid gap-8 lg:grid-cols-2">
+                <div>
+                  <h3 className="mb-3 text-base font-semibold">Income Sources</h3>
+                  {Object.entries(groupedIncome).map(([category, items]) => (
+                    <div key={category} className="mb-5">
+                      <div className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
+                        {formatCategoryName(category)}
+                      </div>
+                      {items.map((item) => (
+                        <div
+                          key={item.id}
+                          className="mb-1 flex items-center justify-between border-l-2 border-emerald-400 pl-3 text-sm text-emerald-400"
+                        >
+                          <span className="capitalize">{item.resourceType}</span>
+                          <span className="font-semibold">+{item.amount.toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <h3 className="mb-3 text-base font-semibold">Expenses</h3>
+                  {Object.entries(groupedExpense).map(([category, items]) => (
+                    <div key={category} className="mb-5">
+                      <div className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
+                        {formatCategoryName(category)}
+                      </div>
+                      {items.map((item) => (
+                        <div
+                          key={item.id}
+                          className="mb-1 flex items-center justify-between border-l-2 border-red-400 pl-3 text-sm text-red-400"
+                        >
+                          <span className="capitalize">{item.resourceType}</span>
+                          <span className="font-semibold">-{item.amount.toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
           <Separator className="my-6" />
-          <h2 className="mb-4 text-xl font-semibold">Budget Analysis</h2>
-          <div className="grid gap-8 lg:grid-cols-2">
-            <div>
-              <h3 className="mb-3 text-base font-semibold">Income Sources</h3>
-              {Object.entries(groupedIncome).map(([category, items]) => (
-                <div key={category} className="mb-5">
-                  <div className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
-                    {formatCategoryName(category)}
-                  </div>
-                  {items.map((item) => (
-                    <div
-                      key={item.id}
-                      className="mb-1 flex items-center justify-between border-l-2 border-emerald-400 pl-3 text-sm text-emerald-400"
-                    >
-                      <span className="capitalize">{item.resourceType}</span>
-                      <span className="font-semibold">+{item.amount.toFixed(2)}</span>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-            <div>
-              <h3 className="mb-3 text-base font-semibold">Expenses</h3>
-              {Object.entries(groupedExpense).map(([category, items]) => (
-                <div key={category} className="mb-5">
-                  <div className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
-                    {formatCategoryName(category)}
-                  </div>
-                  {items.map((item) => (
-                    <div
-                      key={item.id}
-                      className="mb-1 flex items-center justify-between border-l-2 border-red-400 pl-3 text-sm text-red-400"
-                    >
-                      <span className="capitalize">{item.resourceType}</span>
-                      <span className="font-semibold">-{item.amount.toFixed(2)}</span>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       ) : (
         <p className="text-muted-foreground">No snapshot data available</p>
@@ -887,6 +1044,11 @@ function isGenocidalStance(value: string): boolean {
   );
 }
 
+function formatWarPercent(value: number): string {
+  if (Number.isNaN(value)) return '0%';
+  return `${(value * 100).toFixed(0)}%`;
+}
+
 function SpeciesTooltip({
   active,
   payload,
@@ -920,7 +1082,7 @@ function SpeciesTooltip({
         {formatWhole(value)} ({percent.toFixed(1)}%)
       </div>
       <div style={{ fontSize: 12, marginTop: 4, color: deltaColor }}>
-        Δ {deltaText}
+        Delta {deltaText}
       </div>
     </div>
   );

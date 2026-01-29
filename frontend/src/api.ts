@@ -78,6 +78,19 @@ export interface SpeciesBreakdown {
   amount: number;
 }
 
+export interface WarStatus {
+  id: number;
+  countryId: number;
+  warId: number;
+  warName: string;
+  warStartDate: string;
+  warLength: string;
+  attackerWarExhaustion: number;
+  defenderWarExhaustion: number;
+  attackers: string;
+  defenders: string;
+}
+
 export interface GalaxySpeciesHistory {
   gameDate: string;
   speciesName: string;
@@ -102,6 +115,11 @@ export const api = {
 
   getCountrySnapshots: async (countryId: number): Promise<Snapshot[]> => {
     const response = await axios.get(`${API_BASE}/countries/${countryId}/snapshots`);
+    return response.data;
+  },
+
+  getCountryWars: async (countryId: number): Promise<WarStatus[]> => {
+    const response = await axios.get(`${API_BASE}/countries/${countryId}/wars`);
     return response.data;
   },
 

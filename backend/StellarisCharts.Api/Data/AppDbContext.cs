@@ -12,6 +12,7 @@ public class AppDbContext : DbContext
     public DbSet<BudgetLineItem> BudgetLineItems => Set<BudgetLineItem>();
     public DbSet<SpeciesPopulation> SpeciesPopulations => Set<SpeciesPopulation>();
     public DbSet<GlobalSpeciesPopulation> GlobalSpeciesPopulations => Set<GlobalSpeciesPopulation>();
+    public DbSet<WarStatus> WarStatuses => Set<WarStatus>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -92,5 +93,8 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<GlobalSpeciesPopulation>()
             .Property(sp => sp.SpeciesName)
             .HasMaxLength(128);
+
+        modelBuilder.Entity<WarStatus>()
+            .HasIndex(w => w.CountryId);
     }
 }

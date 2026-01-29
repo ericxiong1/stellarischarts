@@ -168,6 +168,56 @@ app.MapPost("/api/saves/upload", async (HttpRequest request, IFormFile file, Sav
         
         await db.SaveChangesAsync();
 
+        // Replace current war status for incoming countries
+        var existingWars = db.WarStatuses.Where(w => incomingIds.Contains(w.CountryId));
+        db.WarStatuses.RemoveRange(existingWars);
+
+        if (result.Wars.Count > 0)
+        {
+            foreach (var war in result.Wars)
+            {
+                foreach (var attackerId in war.AttackerIds)
+                {
+                    if (!incomingIds.Contains(attackerId))
+                        continue;
+
+                    db.WarStatuses.Add(new StellarisCharts.Api.Models.WarStatus
+                    {
+                        CountryId = attackerId,
+                        WarId = war.WarId,
+                        WarName = war.WarName,
+                        WarStartDate = war.WarStartDate,
+                        WarLength = war.WarLength,
+                        AttackerWarExhaustion = war.AttackerWarExhaustion,
+                        DefenderWarExhaustion = war.DefenderWarExhaustion,
+                        Attackers = war.Attackers,
+                        Defenders = war.Defenders
+                    });
+                }
+
+                foreach (var defenderId in war.DefenderIds)
+                {
+                    if (!incomingIds.Contains(defenderId))
+                        continue;
+
+                    db.WarStatuses.Add(new StellarisCharts.Api.Models.WarStatus
+                    {
+                        CountryId = defenderId,
+                        WarId = war.WarId,
+                        WarName = war.WarName,
+                        WarStartDate = war.WarStartDate,
+                        WarLength = war.WarLength,
+                        AttackerWarExhaustion = war.AttackerWarExhaustion,
+                        DefenderWarExhaustion = war.DefenderWarExhaustion,
+                        Attackers = war.Attackers,
+                        Defenders = war.Defenders
+                    });
+                }
+            }
+        }
+
+        await db.SaveChangesAsync();
+
         var snapshots = distinctCountries.Select(c => new StellarisCharts.Api.Models.Snapshot
         {
             CountryId = c.CountryId,
@@ -279,6 +329,9 @@ BEGIN
     END IF;
     IF to_regclass('public.""GlobalSpeciesPopulations""') IS NOT NULL THEN
         EXECUTE 'TRUNCATE TABLE ""GlobalSpeciesPopulations"" RESTART IDENTITY CASCADE';
+    END IF;
+    IF to_regclass('public.""WarStatuses""') IS NOT NULL THEN
+        EXECUTE 'TRUNCATE TABLE ""WarStatuses"" RESTART IDENTITY CASCADE';
     END IF;
     EXECUTE 'TRUNCATE TABLE ""BudgetLineItems"", ""Snapshots"", ""Countries"" RESTART IDENTITY CASCADE';
 END $$;");
@@ -491,6 +544,16 @@ app.MapGet("/api/countries/{id}/snapshots", async (int id, AppDbContext db) =>
         .ToListAsync();
 })
 .WithName("GetCountrySnapshots")
+.WithOpenApi();
+
+// Get active wars for a country
+app.MapGet("/api/countries/{id}/wars", async (int id, AppDbContext db) =>
+{
+    return await db.WarStatuses
+        .Where(w => w.CountryId == id)
+        .ToListAsync();
+})
+.WithName("GetCountryWars")
 .WithOpenApi();
 
 // Get budget data for a snapshot
