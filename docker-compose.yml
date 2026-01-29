@@ -11,7 +11,9 @@ services:
   api:
     image: mcr.microsoft.com/dotnet/aspnet:10.0
     command: sleep infinity
+    environment:
+      ASPNETCORE_URLS: http://0.0.0.0:5000
     ports:
-      - "8080:8080"
+      - "5000:5000"
     depends_on:
       - db

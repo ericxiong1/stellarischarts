@@ -1,7 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api, type SpeciesBreakdown } from '../api';
 import { Card, CardContent } from '@/components/ui/card';
-import { Zap, Gem, Apple, TrendingUp, ChevronUp, ChevronDown } from 'lucide-react';
+import {
+  Zap,
+  Gem,
+  Apple,
+  TrendingUp,
+  Hammer,
+  Boxes,
+  Sparkles,
+  FlaskConical,
+  ChevronUp,
+  ChevronDown,
+} from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
 
 export const GalacticScreen: React.FC = () => {
@@ -96,30 +107,12 @@ export const GalacticScreen: React.FC = () => {
             { key: 'food', label: 'Food', Icon: Apple, iconClass: 'text-emerald-300' },
             { key: 'trade_value', label: 'Trade', Icon: TrendingUp, iconClass: 'text-white' },
           ].map((resource) => {
-            const value =
-              resource.key === 'trade_value'
-                ? totals.trade_value ?? totals.trade ?? 0
-                : totals[resource.key] ?? 0;
-            const incomeValue =
-              resource.key === 'trade_value'
-                ? incomeTotals.trade_value ?? incomeTotals.trade ?? 0
-                : incomeTotals[resource.key] ?? 0;
-            const expenseValue =
-              resource.key === 'trade_value'
-                ? expenseTotals.trade_value ?? expenseTotals.trade ?? 0
-                : expenseTotals[resource.key] ?? 0;
-            const prevIncomeValue =
-              resource.key === 'trade_value'
-                ? previousIncomeTotals.trade_value ?? previousIncomeTotals.trade ?? 0
-                : previousIncomeTotals[resource.key] ?? 0;
-            const prevExpenseValue =
-              resource.key === 'trade_value'
-                ? previousExpenseTotals.trade_value ?? previousExpenseTotals.trade ?? 0
-                : previousExpenseTotals[resource.key] ?? 0;
-            const prevValue =
-              resource.key === 'trade_value'
-                ? previousTotals.trade_value ?? previousTotals.trade ?? 0
-                : previousTotals[resource.key] ?? 0;
+            const value = resolveResource(totals, resource.key);
+            const incomeValue = resolveResource(incomeTotals, resource.key);
+            const expenseValue = resolveResource(expenseTotals, resource.key);
+            const prevIncomeValue = resolveResource(previousIncomeTotals, resource.key);
+            const prevExpenseValue = resolveResource(previousExpenseTotals, resource.key);
+            const prevValue = resolveResource(previousTotals, resource.key);
             const deltaPct =
               prevValue === 0 ? null : ((value - prevValue) / Math.abs(prevValue)) * 100;
             const deltaValue = value - prevValue;
@@ -188,6 +181,122 @@ export const GalacticScreen: React.FC = () => {
             );
           })}
           </div>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            { key: 'alloys', label: 'Alloys', Icon: Hammer, iconClass: 'text-orange-300' },
+            { key: 'consumer_goods', label: 'Consumer Goods', Icon: Boxes, iconClass: 'text-cyan-300' },
+            { key: 'unity', label: 'Unity', Icon: Sparkles, iconClass: 'text-fuchsia-300' },
+            { key: 'research', label: 'Research', Icon: FlaskConical, iconClass: 'text-sky-300' },
+          ].map((resource) => {
+            const value = resolveResource(totals, resource.key);
+            const incomeValue = resolveResource(incomeTotals, resource.key);
+            const expenseValue = resolveResource(expenseTotals, resource.key);
+            const prevIncomeValue = resolveResource(previousIncomeTotals, resource.key);
+            const prevExpenseValue = resolveResource(previousExpenseTotals, resource.key);
+            const prevValue = resolveResource(previousTotals, resource.key);
+            const deltaPct =
+              prevValue === 0 ? null : ((value - prevValue) / Math.abs(prevValue)) * 100;
+            const deltaValue = value - prevValue;
+            const deltaClass = deltaValue >= 0 ? 'text-emerald-300' : 'text-red-400';
+            const valueClass = value >= 0 ? 'text-emerald-400' : 'text-red-400';
+            const DeltaIcon = deltaValue >= 0 ? ChevronUp : ChevronDown;
+            const expenseNetValue = Math.abs(expenseValue);
+            const prevExpenseNetValue = Math.abs(prevExpenseValue);
+            const incomeDeltaValue = incomeValue - prevIncomeValue;
+            const expenseDeltaValue = expenseNetValue - prevExpenseNetValue;
+            const incomeDeltaPct =
+              prevIncomeValue === 0 ? null : (incomeDeltaValue / Math.abs(prevIncomeValue)) * 100;
+            const expenseDeltaPct =
+              prevExpenseNetValue === 0
+                ? null
+                : (expenseDeltaValue / Math.abs(prevExpenseNetValue)) * 100;
+            const incomeDeltaClass = incomeDeltaValue >= 0 ? 'text-emerald-300' : 'text-red-400';
+            const expenseDeltaClass = expenseDeltaValue >= 0 ? 'text-red-400' : 'text-emerald-300';
+            const researchIncome = resource.key === 'research' ? getResearchBreakdown(incomeTotals) : null;
+            const researchPrevIncome =
+              resource.key === 'research' ? getResearchBreakdown(previousIncomeTotals) : null;
+            return (
+              <Card key={resource.key} className="border-border bg-gradient-to-b from-[#151515] to-[#0f0f0f] shadow-md">
+                <CardContent className="space-y-4 p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="rounded-lg bg-black/40 p-2">
+                      <resource.Icon className={`h-4 w-4 ${resource.iconClass}`} />
+                    </div>
+                    {deltaPct === null ? null : (
+                      <div className={`flex items-center gap-1 text-xs font-semibold ${deltaClass}`}>
+                        <span>
+                          {formatDelta(deltaPct)}
+                          {` (${formatSigned(deltaValue)})`}
+                        </span>
+                        <DeltaIcon className="h-3.5 w-3.5" />
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <div className={`text-2xl font-semibold ${valueClass}`}>{formatSigned(value)}</div>
+                    <div className="text-xs text-muted-foreground">{resource.label}</div>
+                  </div>
+                    <div className="space-y-1 text-xs text-muted-foreground">
+                    {resource.key === 'research' && researchIncome && researchPrevIncome ? (
+                      <>
+                        {[
+                          { key: 'physics', label: 'Physics' },
+                          { key: 'society', label: 'Society' },
+                          { key: 'engineering', label: 'Engineering' },
+                        ].map((line) => {
+                          const current = researchIncome[line.key as 'physics' | 'society' | 'engineering'];
+                          const previous = researchPrevIncome[line.key as 'physics' | 'society' | 'engineering'];
+                          const deltaValue = current - previous;
+                          const deltaPct =
+                            previous === 0 ? null : (deltaValue / Math.abs(previous)) * 100;
+                          const deltaClass = deltaValue >= 0 ? 'text-emerald-300' : 'text-red-400';
+                          return (
+                            <div key={line.key} className="flex items-center justify-between">
+                              <span>{line.label}</span>
+                              <span className="font-semibold text-emerald-300">
+                                {formatCompact(current)}
+                                {deltaPct === null ? '' : (
+                                  <span className={`ml-1 ${deltaClass}`}>
+                                    ({formatSigned(deltaValue)}, {formatDelta(deltaPct)})
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </>
+                    ) : (
+                    <div className="flex items-center justify-between">
+                      <span>Gross Income</span>
+                      <span className="font-semibold text-emerald-300">
+                        {formatCompact(incomeValue)}
+                        {incomeDeltaPct === null ? '' : (
+                          <span className={`ml-1 ${incomeDeltaClass}`}>
+                            ({formatSigned(incomeDeltaValue)}, {formatDelta(incomeDeltaPct)})
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    )}
+                    {resource.key === 'research' ? null : (
+                    <div className="flex items-center justify-between">
+                      <span>Net Expenses</span>
+                      <span className="font-semibold text-red-400">
+                        {formatCompact(expenseNetValue)}
+                        {expenseDeltaPct === null ? '' : (
+                          <span className={`ml-1 ${expenseDeltaClass}`}>
+                            ({formatSigned(expenseDeltaValue)}, {formatDelta(expenseDeltaPct)})
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+          </div>
           <h2 className="mb-3 mt-6 text-xl font-semibold">Population Demographics</h2>
           <Card className="border-border">
             <CardContent className="p-4">
@@ -250,6 +359,35 @@ function formatSigned(value: number): string {
 function formatDelta(value: number): string {
   const sign = value >= 0 ? '+' : '';
   return `${sign}${value.toFixed(0)}%`;
+}
+
+function getResearchBreakdown(source: Record<string, number>): {
+  physics: number;
+  society: number;
+  engineering: number;
+} {
+  return {
+    physics: source.physics_research ?? source.physics ?? 0,
+    society: source.society_research ?? source.society ?? 0,
+    engineering: source.engineering_research ?? source.engineering ?? 0,
+  };
+}
+
+function resolveResource(source: Record<string, number>, key: string): number {
+  if (!source) return 0;
+  if (key === 'trade_value') {
+    return source.trade_value ?? source.trade ?? 0;
+  }
+  if (key === 'research') {
+    let total = 0;
+    for (const [resourceKey, value] of Object.entries(source)) {
+      if (resourceKey === 'research' || resourceKey.endsWith('_research')) {
+        total += Number(value);
+      }
+    }
+    return total;
+  }
+  return source[key] ?? 0;
 }
 
 function groupSpeciesData(data: SpeciesBreakdown[], minPercent: number): SpeciesBreakdown[] {

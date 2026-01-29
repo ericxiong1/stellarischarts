@@ -37,7 +37,7 @@ npm install
 npm run dev
 ```
 
-The frontend expects the API at `http://localhost:5173` (Vite proxy to `/api`).
+The frontend expects the API at `http://localhost:5000` (Vite proxy to `/api`).
 
 ## Uploading saves
 - Place `.sav` files in `saves/` or use the UI scan/upload.

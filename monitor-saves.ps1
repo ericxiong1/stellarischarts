@@ -1,7 +1,7 @@
 # Monitor Stellaris saves folder and automatically upload new snapshots
 param(
     [string]$SavesFolder = "c:\Users\Eric\Desktop\stellaris-charts\saves",
-    [string]$ApiUrl = "http://localhost:5290/api/saves/upload"
+    [string]$ApiUrl = "http://localhost:5000/api/saves/upload"
 )
 
 # Create saves folder if it doesn't exist
