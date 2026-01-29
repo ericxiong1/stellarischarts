@@ -8,6 +8,14 @@ public class Country
     public int CountryId { get; set; }
     public string GovernmentType { get; set; } = null!;
     public string Authority { get; set; } = null!;
+    public string Ethos { get; set; } = string.Empty;
+    public string Civics { get; set; } = string.Empty;
+    public string TraditionTrees { get; set; } = string.Empty;
+    public string AscensionPerks { get; set; } = string.Empty;
+    public string FederationType { get; set; } = string.Empty;
+    public string SubjectStatus { get; set; } = string.Empty;
+    public string DiplomaticStance { get; set; } = string.Empty;
+    public string DiplomaticWeight { get; set; } = string.Empty;
     public string Personality { get; set; } = null!;
     public string GraphicalCulture { get; set; } = null!;
     public int Capital { get; set; }

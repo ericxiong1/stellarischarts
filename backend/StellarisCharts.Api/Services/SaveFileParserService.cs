@@ -15,6 +15,8 @@ public class SaveFileParserService
         result.GameDate = ExtractStringValue(content, @"^date=""([^""]+)""") ?? "Unknown";
         result.Tick = ExtractIntValue(content, @"^tick=(\d+)");
         
+        var federationTypes = ParseFederationTypes(content);
+
         // Extract all countries
         if (TryExtractTopLevelBlock(content, "country", out var countriesContent))
         {
@@ -22,7 +24,7 @@ public class SaveFileParserService
             
             foreach (var (countryId, countryData) in countryBlocks)
             {
-                var country = ParseCountry(countryId, countryData);
+                var country = ParseCountry(countryId, countryData, federationTypes);
                 if (country != null)
                 {
                     result.Countries.Add(country);
@@ -36,6 +38,39 @@ public class SaveFileParserService
 
         if (result.Countries.Count > 0)
         {
+            var countryNameById = result.Countries.ToDictionary(c => c.CountryId, c => c.Name);
+            foreach (var country in result.Countries)
+            {
+                if (!string.IsNullOrWhiteSpace(country.SubjectStatus))
+                {
+                    var subjectMatch = Regex.Match(country.SubjectStatus, @"Subject of:\s*(\d+)");
+                    if (subjectMatch.Success && int.TryParse(subjectMatch.Groups[1].Value, out var overlordId))
+                    {
+                        if (countryNameById.TryGetValue(overlordId, out var name))
+                        {
+                            country.SubjectStatus = $"Subject of: {name}";
+                        }
+                    }
+
+                    var overlordMatch = Regex.Match(country.SubjectStatus, @"Overlord of:\s*(.+)");
+                    if (overlordMatch.Success)
+                    {
+                        var ids = Regex.Matches(country.SubjectStatus, @"\b\d+\b")
+                            .Select(m => int.TryParse(m.Value, out var id) ? id : 0)
+                            .Where(id => id != 0)
+                            .ToList();
+                        var names = ids
+                            .Select(id => countryNameById.TryGetValue(id, out var name) ? name : null)
+                            .Where(name => !string.IsNullOrWhiteSpace(name))
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .ToList();
+                        country.SubjectStatus = names.Count == 0
+                            ? string.Empty
+                            : $"Overlord of: {string.Join(", ", names)}";
+                    }
+                }
+            }
+
             var allowedCountries = result.Countries.Select(c => c.CountryId).ToHashSet();
             var speciesPopulations = ParseSpeciesDemographics(content, allowedCountries);
             result.SpeciesPopulations.AddRange(speciesPopulations);
@@ -191,7 +226,7 @@ public class SaveFileParserService
         return blocks;
     }
 
-    private Country? ParseCountry(int countryId, string countryData)
+    private Country? ParseCountry(int countryId, string countryData, Dictionary<int, string> federationTypes)
     {
         try
         {
@@ -211,6 +246,14 @@ public class SaveFileParserService
                     @"adjective=\s*""([^""]+)""") ?? "Unknown",
                 GovernmentType = ExtractStringValue(countryData, @"government=\s*\{\s*key=""([^""]+)""") ?? "Unknown",
                 Authority = ExtractStringValue(countryData, @"authority=""([^""]+)""") ?? "Unknown",
+                Ethos = ExtractEthos(countryData),
+                Civics = ExtractListValue(countryData, "civics", "civic_"),
+                TraditionTrees = ExtractListValue(countryData, "tradition_categories", "tradition_"),
+                AscensionPerks = ExtractListValue(countryData, "ascension_perks", "ap_"),
+                FederationType = ExtractFederationType(countryData, federationTypes),
+                SubjectStatus = ExtractSubjectStatus(countryData),
+                DiplomaticStance = ExtractDiplomaticStance(countryData),
+                DiplomaticWeight = ExtractDiplomaticWeight(countryData),
                 Personality = ExtractStringValue(countryData, @"personality=""([^""]+)""") ?? "Unknown",
                 GraphicalCulture = ExtractStringValue(countryData, @"graphical_culture=""([^""]+)""") ?? "Unknown",
                 Capital = ExtractIntValue(countryData, @"capital=(\d+)"),
@@ -441,6 +484,119 @@ public class SaveFileParserService
         }
 
         return string.Join(' ', words);
+    }
+
+    private string ExtractEthos(string countryData)
+    {
+        if (!TryExtractInlineBlock(countryData, "ethos", out var ethosBlock))
+            return string.Empty;
+
+        var matches = Regex.Matches(ethosBlock, @"ethic=""([^""]+)""");
+        if (matches.Count == 0)
+            return string.Empty;
+
+        var labels = matches
+            .Select(m => m.Groups[1].Value)
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => ToHumanLabel(v, "ethic_"))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return labels.Count == 0 ? string.Empty : string.Join(", ", labels);
+    }
+
+    private string ExtractListValue(string countryData, string key, string prefix)
+    {
+        if (!TryExtractInlineBlock(countryData, key, out var block))
+            return string.Empty;
+
+        var values = Regex.Matches(block, "\"([^\"]+)\"")
+            .Select(m => m.Groups[1].Value)
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => ToHumanLabel(v, prefix))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return values.Count == 0 ? string.Empty : string.Join(", ", values);
+    }
+
+    private string ExtractFederationType(string countryData, Dictionary<int, string> federationTypes)
+    {
+        var federationId = ExtractIntValue(countryData, @"federation=(\d+)");
+        if (federationId == 0)
+        {
+            federationId = ExtractIntValue(countryData, @"associated_federation=(\d+)");
+        }
+
+        if (federationId == 0)
+            return string.Empty;
+
+        return federationTypes.TryGetValue(federationId, out var federationType)
+            ? federationType
+            : $"Federation {federationId}";
+    }
+
+    private string ExtractSubjectStatus(string countryData)
+    {
+        var overlordId = ExtractIntValue(countryData, @"overlord=(\d+)");
+        if (overlordId != 0)
+        {
+            return $"Subject of: {overlordId}";
+        }
+
+        if (TryExtractInlineBlock(countryData, "subjects", out var subjectsBlock))
+        {
+            var subjects = ExtractIntList(subjectsBlock);
+            if (subjects.Count > 0)
+            {
+                return $"Overlord of: {string.Join(", ", subjects)}";
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private string ExtractDiplomaticStance(string countryData)
+    {
+        var stance = ExtractStringValue(
+            countryData,
+            @"policy=""diplomatic_stance""[\s\S]{0,500}?selected=""([^""]+)""",
+            @"policy=""diplomatic_stance""[\s\S]{0,500}?""(diplo_stance_[^""]+)"""
+        );
+
+        if (string.IsNullOrWhiteSpace(stance))
+            return string.Empty;
+
+        return ToHumanLabel(stance, "diplo_stance_");
+    }
+
+    private string ExtractDiplomaticWeight(string countryData)
+    {
+        var weight = ExtractDecimalValue(countryData, @"diplo_weight=([0-9.]+)");
+        if (weight == 0m)
+        {
+            weight = ExtractDecimalValue(countryData, @"diplomatic_weight=([0-9.]+)");
+        }
+
+        return weight == 0m ? string.Empty : weight.ToString("0.##");
+    }
+
+    private Dictionary<int, string> ParseFederationTypes(string content)
+    {
+        var result = new Dictionary<int, string>();
+        if (!TryExtractTopLevelBlock(content, "federation", out var federationContent))
+            return result;
+
+        foreach (var (federationId, federationData) in ExtractIdBlocks(federationContent))
+        {
+            var type = ExtractStringValue(federationData, @"federation_type=""([^""]+)""");
+            if (string.IsNullOrWhiteSpace(type))
+                continue;
+
+            result[federationId] = ToHumanLabel(type, "federation_");
+        }
+
+        return result;
     }
 
     private bool ShouldExcludeByName(string name)

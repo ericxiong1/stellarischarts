@@ -345,6 +345,14 @@ app.MapGet("/api/countries/summary", async (AppDbContext db) =>
                 c.CountryId,
                 c.GovernmentType,
                 c.Authority,
+                c.Ethos,
+                c.Civics,
+                c.TraditionTrees,
+                c.AscensionPerks,
+                c.FederationType,
+                c.SubjectStatus,
+                c.DiplomaticStance,
+                c.DiplomaticWeight,
                 c.Personality,
                 c.GraphicalCulture,
                 c.Capital,
@@ -571,6 +579,49 @@ app.MapGet("/api/galaxy/species/previous", async (AppDbContext db) =>
     return Results.Ok(data);
 })
 .WithName("GetGalaxySpeciesPrevious")
+.WithOpenApi();
+
+// Galaxywide species breakdown history by game date
+app.MapGet("/api/galaxy/species/history", async (AppDbContext db) =>
+{
+    var speciesTable = await db.Database.SqlQueryRaw<string?>(
+        "SELECT to_regclass('public.\"GlobalSpeciesPopulations\"')::text AS \"Value\"").FirstOrDefaultAsync();
+    if (speciesTable == null)
+        return Results.Ok(new List<object>());
+
+    var snapshotIds = await db.GlobalSpeciesPopulations
+        .Select(sp => sp.SnapshotId)
+        .Distinct()
+        .ToListAsync();
+
+    if (snapshotIds.Count == 0)
+        return Results.Ok(new List<object>());
+
+    var latestSnapshots = await db.Snapshots
+        .Where(s => snapshotIds.Contains(s.Id))
+        .GroupBy(s => s.GameDate)
+        .Select(g => g.OrderByDescending(s => s.SnapshotTime).First())
+        .ToListAsync();
+
+    if (latestSnapshots.Count == 0)
+        return Results.Ok(new List<object>());
+
+    var latestIds = latestSnapshots.Select(s => s.Id).ToList();
+    var snapshotDateById = latestSnapshots.ToDictionary(s => s.Id, s => s.GameDate);
+
+    var data = await db.GlobalSpeciesPopulations
+        .Where(sp => latestIds.Contains(sp.SnapshotId))
+        .Select(sp => new
+        {
+            gameDate = snapshotDateById[sp.SnapshotId],
+            speciesName = sp.SpeciesName,
+            amount = sp.Amount
+        })
+        .ToListAsync();
+
+    return Results.Ok(data);
+})
+.WithName("GetGalaxySpeciesHistory")
 .WithOpenApi();
 
 app.Run();

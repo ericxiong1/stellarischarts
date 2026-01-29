@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { api, type SpeciesBreakdown } from '../api';
+import { api, type SpeciesBreakdown, type GalaxySpeciesHistory } from '../api';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   Zap,
@@ -20,7 +20,19 @@ import {
   ChevronUp,
   ChevronDown,
 } from 'lucide-react';
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
+import {
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  Legend,
+  LineChart,
+  Line,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+} from 'recharts';
 
 export const GalacticScreen: React.FC = () => {
   const [totals, setTotals] = useState<Record<string, number>>({});
@@ -31,6 +43,7 @@ export const GalacticScreen: React.FC = () => {
   const [previousExpenseTotals, setPreviousExpenseTotals] = useState<Record<string, number>>({});
   const [speciesBreakdown, setSpeciesBreakdown] = useState<SpeciesBreakdown[]>([]);
   const [previousSpeciesBreakdown, setPreviousSpeciesBreakdown] = useState<SpeciesBreakdown[]>([]);
+  const [speciesHistory, setSpeciesHistory] = useState<GalaxySpeciesHistory[]>([]);
   const [gameDate, setGameDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -50,6 +63,8 @@ export const GalacticScreen: React.FC = () => {
         setSpeciesBreakdown(species);
         const prevSpecies = await api.getGalaxySpeciesPrevious();
         setPreviousSpeciesBreakdown(prevSpecies);
+        const history = await api.getGalaxySpeciesHistory();
+        setSpeciesHistory(history);
       } finally {
         setLoading(false);
       }
@@ -80,6 +95,36 @@ export const GalacticScreen: React.FC = () => {
     });
     return result;
   }, [previousSpeciesChartData, speciesChartData]);
+
+  const speciesTrendData = useMemo(() => {
+    if (speciesHistory.length === 0) return [];
+    const trendSpecies = speciesChartData.map((item) => item.speciesName);
+    const topSpecies = trendSpecies.filter((name) => name !== 'Other');
+
+    const grouped = new Map<string, GalaxySpeciesHistory[]>();
+    for (const entry of speciesHistory) {
+      if (!grouped.has(entry.gameDate)) {
+        grouped.set(entry.gameDate, []);
+      }
+      grouped.get(entry.gameDate)!.push(entry);
+    }
+
+    const orderedDates = [...grouped.keys()].sort((a, b) => parseGameDate(a) - parseGameDate(b));
+    return orderedDates.map((gameDate) => {
+      const entries = grouped.get(gameDate) ?? [];
+      const map = new Map(entries.map((s) => [s.speciesName, s.amount]));
+      const total = entries.reduce((sum, s) => sum + s.amount, 0);
+      const row: Record<string, number | string> = { gameDate };
+      for (const name of topSpecies) {
+        row[name] = Number(map.get(name) ?? 0);
+      }
+      if (trendSpecies.includes('Other')) {
+        const knownTotal = topSpecies.reduce((sum, name) => sum + Number(map.get(name) ?? 0), 0);
+        row.Other = Math.max(0, total - knownTotal);
+      }
+      return row;
+    });
+  }, [speciesHistory, speciesChartData]);
 
   const speciesColors = [
     '#3b82f6',
@@ -254,46 +299,91 @@ export const GalacticScreen: React.FC = () => {
             );
           })()}
           <h2 className="mb-3 mt-6 text-xl font-semibold">Population Demographics</h2>
-          <Card className="border-border">
-            <CardContent className="p-4">
-              {speciesChartData.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No species data available</p>
-              ) : (
-                <div className="h-72">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={speciesChartData}
-                        dataKey="amount"
-                        nameKey="speciesName"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={100}
-                        label={false}
-                        labelLine={false}
-                      >
-                        {speciesChartData.map((entry, index) => (
-                          <Cell
-                            key={`${entry.speciesName}-${index}`}
-                            fill={speciesColors[index % speciesColors.length]}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card className="border-border">
+              <CardContent className="p-4">
+                {speciesChartData.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No species data available</p>
+                ) : (
+                  <div className="h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={speciesChartData}
+                          dataKey="amount"
+                          nameKey="speciesName"
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={100}
+                          label={false}
+                          labelLine={false}
+                        >
+                          {speciesChartData.map((entry, index) => (
+                            <Cell
+                              key={`${entry.speciesName}-${index}`}
+                              fill={speciesColors[index % speciesColors.length]}
+                            />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          content={
+                            <SpeciesTooltip
+                              total={sumSpeciesAmount(speciesChartData)}
+                              deltaByName={speciesDeltaByName}
+                            />
+                          }
+                        />
+                        <Legend content={<SpeciesLegend data={speciesChartData} colors={speciesColors} />} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            <Card className="border-border">
+              <CardContent className="p-4">
+                {speciesTrendData.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No species history available</p>
+                ) : (
+                  <div className="h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={speciesTrendData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="oklch(var(--border))" />
+                        <XAxis
+                          dataKey="gameDate"
+                          type="category"
+                          tick={{ fill: 'oklch(var(--muted-foreground))', fontSize: 12 }}
+                        />
+                        <YAxis
+                          tick={{ fill: 'oklch(var(--muted-foreground))', fontSize: 12 }}
+                          tickFormatter={(value) => formatCompact(Number(value))}
+                          allowDecimals={false}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            background: 'oklch(var(--card))',
+                            border: '1px solid oklch(var(--border))',
+                          }}
+                          labelStyle={{ color: 'oklch(var(--muted-foreground))' }}
+                          labelFormatter={(_, payload) => payload?.[0]?.payload?.gameDate ?? ''}
+                        />
+                        <Legend />
+                        {speciesChartData.map((species, index) => (
+                          <Line
+                            key={species.speciesName}
+                            type="monotone"
+                            dataKey={species.speciesName}
+                            stroke={speciesColors[index % speciesColors.length]}
+                            dot={false}
                           />
                         ))}
-                      </Pie>
-                      <Tooltip
-                        content={
-                          <SpeciesTooltip
-                            total={sumSpeciesAmount(speciesChartData)}
-                            deltaByName={speciesDeltaByName}
-                          />
-                        }
-                      />
-                      <Legend content={<SpeciesLegend data={speciesChartData} colors={speciesColors} />} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </>
       )}
     </div>
@@ -315,6 +405,17 @@ function formatSigned(value: number): string {
 function formatDelta(value: number): string {
   const sign = value >= 0 ? '+' : '';
   return `${sign}${value.toFixed(0)}%`;
+}
+
+function parseGameDate(value: string): number {
+  const match = /^(\d{4})\.(\d{2})\.(\d{2})$/.exec(value);
+  if (!match) {
+    return new Date(value).getTime();
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  return Date.UTC(year, month, day);
 }
 
 function getResearchBreakdown(source: Record<string, number>): {

@@ -49,6 +49,7 @@ export const CountryDetail: React.FC<CountryDetailProps> = ({ country }) => {
   const [allCountries, setAllCountries] = useState<Country[]>([]);
   const [speciesBreakdown, setSpeciesBreakdown] = useState<SpeciesBreakdown[]>([]);
   const [previousSpeciesBreakdown, setPreviousSpeciesBreakdown] = useState<SpeciesBreakdown[]>([]);
+  const [speciesHistory, setSpeciesHistory] = useState<Map<number, SpeciesBreakdown[]>>(new Map());
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -115,6 +116,29 @@ export const CountryDetail: React.FC<CountryDetailProps> = ({ country }) => {
 
     fetchBudget();
   }, [selectedSnapshot, snapshots]);
+
+  useEffect(() => {
+    if (snapshots.length === 0) {
+      setSpeciesHistory(new Map());
+      return;
+    }
+
+    const fetchSpeciesHistory = async () => {
+      try {
+        const entries = await Promise.all(
+          snapshots.map(async (snapshot) => {
+            const data = await api.getSnapshotSpecies(snapshot.id);
+            return [snapshot.id, data] as const;
+          })
+        );
+        setSpeciesHistory(new Map(entries));
+      } catch (err) {
+        console.error('Failed to fetch species history:', err);
+      }
+    };
+
+    fetchSpeciesHistory();
+  }, [snapshots]);
 
   const incomeBudget = budgetItems.filter((b) => b.section === 'income');
   const expenseBudget = budgetItems.filter((b) => b.section === 'expenses');
@@ -214,6 +238,28 @@ export const CountryDetail: React.FC<CountryDetailProps> = ({ country }) => {
     return result;
   }, [previousSpeciesChartData, speciesChartData]);
 
+  const speciesTrendData = useMemo(() => {
+    if (snapshots.length === 0 || speciesHistory.size === 0) return [];
+    const ordered = [...snapshots].sort((a, b) => parseGameDate(a.gameDate) - parseGameDate(b.gameDate));
+    const trendSpecies = speciesChartData.map((item) => item.speciesName);
+    const topSpecies = trendSpecies.filter((name) => name !== 'Other');
+
+    return ordered.map((snapshot) => {
+      const snapshotSpecies = speciesHistory.get(snapshot.id) ?? [];
+      const map = new Map(snapshotSpecies.map((s) => [s.speciesName, s.amount]));
+      const total = snapshotSpecies.reduce((sum, s) => sum + s.amount, 0);
+      const row: Record<string, number | string> = { gameDate: snapshot.gameDate };
+      for (const name of topSpecies) {
+        row[name] = Number(map.get(name) ?? 0);
+      }
+      if (trendSpecies.includes('Other')) {
+        const knownTotal = topSpecies.reduce((sum, name) => sum + Number(map.get(name) ?? 0), 0);
+        row.Other = Math.max(0, total - knownTotal);
+      }
+      return row;
+    });
+  }, [snapshots, speciesHistory, speciesChartData]);
+
   const speciesColors = [
     '#3b82f6',
     '#22c55e',
@@ -254,6 +300,19 @@ export const CountryDetail: React.FC<CountryDetailProps> = ({ country }) => {
     return rankMap;
   }, [allCountries, country]);
 
+  const metaItems = useMemo(() => {
+    if (!country) return [];
+    return [
+      { label: 'Civics', value: country.civics },
+      { label: 'Traditions', value: country.traditionTrees },
+      { label: 'Ascension Perks', value: country.ascensionPerks },
+      { label: 'Federation', value: country.federationType },
+      { label: 'Subject Status', value: country.subjectStatus },
+      { label: 'Diplomatic Stance', value: country.diplomaticStance },
+      { label: 'Diplo Weight', value: country.diplomaticWeight },
+    ].filter((item) => item.value && item.value.trim().length > 0);
+  }, [country]);
+
   if (!country) {
     return (
       <div className="flex flex-1 items-center justify-center bg-background p-8 text-muted-foreground">
@@ -274,6 +333,27 @@ export const CountryDetail: React.FC<CountryDetailProps> = ({ country }) => {
                 <Badge variant="secondary">{country.governmentType}</Badge>
                 <Badge variant="outline">{country.authority}</Badge>
               </div>
+              {country.ethos && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {country.ethos.split(',').map((ethic) => (
+                    <Badge key={ethic.trim()} variant="outline">
+                      {ethic.trim()}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              {metaItems.length > 0 && (
+                <div className="mt-4 grid gap-3 text-xs text-muted-foreground sm:grid-cols-2">
+                  {metaItems.map((item) => (
+                    <div key={item.label} className="flex flex-col gap-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-foreground">
+                        {item.label}
+                      </span>
+                      <span className="text-foreground/90">{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="flex w-full flex-col gap-4 lg:w-auto lg:min-w-[360px]">
               <div className="text-right text-sm font-semibold text-foreground">{country.name}</div>
@@ -477,46 +557,91 @@ export const CountryDetail: React.FC<CountryDetailProps> = ({ country }) => {
             );
           })()}
           <h2 className="mb-3 text-xl font-semibold">Population Demographics</h2>
-          <Card className="mb-6 border-border">
-            <CardContent className="p-4">
-              {speciesChartData.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No species data available</p>
-              ) : (
-                <div className="h-72">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={speciesChartData}
-                        dataKey="amount"
-                        nameKey="speciesName"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={100}
-                        label={false}
-                        labelLine={false}
-                      >
-                        {speciesChartData.map((entry, index) => (
-                          <Cell
-                            key={`${entry.speciesName}-${index}`}
-                            fill={speciesColors[index % speciesColors.length]}
+          <div className="mb-6 grid gap-4 lg:grid-cols-2">
+            <Card className="border-border">
+              <CardContent className="p-4">
+                {speciesChartData.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No species data available</p>
+                ) : (
+                  <div className="h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={speciesChartData}
+                          dataKey="amount"
+                          nameKey="speciesName"
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={100}
+                          label={false}
+                          labelLine={false}
+                        >
+                          {speciesChartData.map((entry, index) => (
+                            <Cell
+                              key={`${entry.speciesName}-${index}`}
+                              fill={speciesColors[index % speciesColors.length]}
+                            />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          content={
+                            <SpeciesTooltip
+                              total={sumSpeciesAmount(speciesChartData)}
+                              deltaByName={speciesDeltaByName}
+                            />
+                          }
+                        />
+                        <Legend content={<SpeciesLegend data={speciesChartData} colors={speciesColors} />} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            <Card className="border-border">
+              <CardContent className="p-4">
+                {speciesTrendData.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No species history available</p>
+                ) : (
+                  <div className="h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={speciesTrendData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="oklch(var(--border))" />
+                        <XAxis
+                          dataKey="gameDate"
+                          type="category"
+                          tick={{ fill: 'oklch(var(--muted-foreground))', fontSize: 12 }}
+                        />
+                        <YAxis
+                          tick={{ fill: 'oklch(var(--muted-foreground))', fontSize: 12 }}
+                          tickFormatter={(value) => formatCompact(Number(value))}
+                          allowDecimals={false}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            background: 'oklch(var(--card))',
+                            border: '1px solid oklch(var(--border))',
+                          }}
+                          labelStyle={{ color: 'oklch(var(--muted-foreground))' }}
+                          labelFormatter={(_, payload) => payload?.[0]?.payload?.gameDate ?? ''}
+                        />
+                        <Legend />
+                        {speciesChartData.map((species, index) => (
+                          <Line
+                            key={species.speciesName}
+                            type="monotone"
+                            dataKey={species.speciesName}
+                            stroke={speciesColors[index % speciesColors.length]}
+                            dot={false}
                           />
                         ))}
-                      </Pie>
-                      <Tooltip
-                        content={
-                          <SpeciesTooltip
-                            total={sumSpeciesAmount(speciesChartData)}
-                            deltaByName={speciesDeltaByName}
-                          />
-                        }
-                      />
-                      <Legend content={<SpeciesLegend data={speciesChartData} colors={speciesColors} />} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
           {chartData.length > 0 && (
             <div>
               <h2 className="mb-3 mt-2 text-xl font-semibold">Power Over Time</h2>

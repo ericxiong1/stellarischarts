@@ -9,6 +9,14 @@ export interface Country {
   countryId: number;
   governmentType: string;
   authority: string;
+  ethos: string;
+  civics: string;
+  traditionTrees: string;
+  ascensionPerks: string;
+  federationType: string;
+  subjectStatus: string;
+  diplomaticStance: string;
+  diplomaticWeight: string;
   personality: string;
   graphicalCulture: string;
   capital: number;
@@ -70,6 +78,12 @@ export interface SpeciesBreakdown {
   amount: number;
 }
 
+export interface GalaxySpeciesHistory {
+  gameDate: string;
+  speciesName: string;
+  amount: number;
+}
+
 export const api = {
   getCountries: async (): Promise<Country[]> => {
     const response = await axios.get(`${API_BASE}/countries`);
@@ -108,6 +122,11 @@ export const api = {
 
   getGalaxySpeciesPrevious: async (): Promise<SpeciesBreakdown[]> => {
     const response = await axios.get(`${API_BASE}/galaxy/species/previous`);
+    return response.data;
+  },
+
+  getGalaxySpeciesHistory: async (): Promise<GalaxySpeciesHistory[]> => {
+    const response = await axios.get(`${API_BASE}/galaxy/species/history`);
     return response.data;
   },
 
