@@ -10,6 +10,13 @@ import {
   Boxes,
   Sparkles,
   FlaskConical,
+  Flame,
+  Wind,
+  Moon,
+  Magnet,
+  Droplets,
+  Cpu,
+  Crown,
   ChevronUp,
   ChevronDown,
 } from 'lucide-react';
@@ -100,203 +107,152 @@ export const GalacticScreen: React.FC = () => {
         <p className="text-muted-foreground">Loading summary...</p>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {[
-            { key: 'energy', label: 'Energy Credits', Icon: Zap, iconClass: 'text-yellow-300' },
-            { key: 'minerals', label: 'Minerals', Icon: Gem, iconClass: 'text-red-400' },
-            { key: 'food', label: 'Food', Icon: Apple, iconClass: 'text-emerald-300' },
-            { key: 'trade_value', label: 'Trade', Icon: TrendingUp, iconClass: 'text-white' },
-          ].map((resource) => {
-            const value = resolveResource(totals, resource.key);
-            const incomeValue = resolveResource(incomeTotals, resource.key);
-            const expenseValue = resolveResource(expenseTotals, resource.key);
-            const prevIncomeValue = resolveResource(previousIncomeTotals, resource.key);
-            const prevExpenseValue = resolveResource(previousExpenseTotals, resource.key);
-            const prevValue = resolveResource(previousTotals, resource.key);
-            const deltaPct =
-              prevValue === 0 ? null : ((value - prevValue) / Math.abs(prevValue)) * 100;
-            const deltaValue = value - prevValue;
-            const deltaClass = deltaValue >= 0 ? 'text-emerald-300' : 'text-red-400';
-            const valueClass = value >= 0 ? 'text-emerald-400' : 'text-red-400';
-            const DeltaIcon = deltaValue >= 0 ? ChevronUp : ChevronDown;
-            const expenseNetValue = Math.abs(expenseValue);
-            const prevExpenseNetValue = Math.abs(prevExpenseValue);
-            const incomeDeltaValue = incomeValue - prevIncomeValue;
-            const expenseDeltaValue = expenseNetValue - prevExpenseNetValue;
-            const incomeDeltaPct =
-              prevIncomeValue === 0 ? null : (incomeDeltaValue / Math.abs(prevIncomeValue)) * 100;
-            const expenseDeltaPct =
-              prevExpenseNetValue === 0
-                ? null
-                : (expenseDeltaValue / Math.abs(prevExpenseNetValue)) * 100;
-            const incomeDeltaClass = incomeDeltaValue >= 0 ? 'text-emerald-300' : 'text-red-400';
-            const expenseDeltaClass = expenseDeltaValue >= 0 ? 'text-red-400' : 'text-emerald-300';
+          {(() => {
+            const resourceCards = [
+              { key: 'energy', label: 'Energy Credits', Icon: Zap, iconClass: 'text-yellow-300' },
+              { key: 'minerals', label: 'Minerals', Icon: Gem, iconClass: 'text-red-400' },
+              { key: 'food', label: 'Food', Icon: Apple, iconClass: 'text-emerald-300' },
+              { key: 'trade_value', label: 'Trade', Icon: TrendingUp, iconClass: 'text-white' },
+              { key: 'alloys', label: 'Alloys', Icon: Hammer, iconClass: 'text-orange-300' },
+              { key: 'consumer_goods', label: 'Consumer Goods', Icon: Boxes, iconClass: 'text-cyan-300' },
+              { key: 'unity', label: 'Unity', Icon: Sparkles, iconClass: 'text-fuchsia-300' },
+              { key: 'research', label: 'Research', Icon: FlaskConical, iconClass: 'text-sky-300' },
+              { key: 'volatile_motes', label: 'Volatile Motes', Icon: Flame, iconClass: 'text-orange-300' },
+              { key: 'rare_crystals', label: 'Rare Crystals', Icon: Gem, iconClass: 'text-pink-300' },
+              { key: 'exotic_gases', label: 'Exotic Gases', Icon: Wind, iconClass: 'text-cyan-300' },
+              { key: 'influence', label: 'Influence', Icon: Crown, iconClass: 'text-yellow-200' },
+              { key: 'dark_matter', label: 'Dark Matter', Icon: Moon, iconClass: 'text-indigo-300' },
+              { key: 'living_metal', label: 'Living Metal', Icon: Magnet, iconClass: 'text-emerald-300' },
+              { key: 'zro', label: 'Zro', Icon: Droplets, iconClass: 'text-violet-300' },
+              { key: 'minor_artifacts', label: 'Minor Artifacts', Icon: Sparkles, iconClass: 'text-amber-300' },
+              { key: 'astral_threads', label: 'Astral Threads', Icon: Wind, iconClass: 'text-teal-300' },
+              { key: 'nanites', label: 'Nanites', Icon: Cpu, iconClass: 'text-slate-200' },
+            ].filter((resource) => shouldShowResource(resource.key, incomeTotals, expenseTotals));
+
+            if (resourceCards.length === 0) return null;
+
             return (
-              <Card key={resource.key} className="border-border bg-gradient-to-b from-[#151515] to-[#0f0f0f] shadow-md">
-                <CardContent className="space-y-4 p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="rounded-lg bg-black/40 p-2">
-                      <resource.Icon className={`h-4 w-4 ${resource.iconClass}`} />
-                    </div>
-                    {deltaPct === null ? null : (
-                      <div className={`flex items-center gap-1 text-xs font-semibold ${deltaClass}`}>
-                        <span>
-                          {formatDelta(deltaPct)}
-                          {` (${formatSigned(deltaValue)})`}
-                        </span>
-                        <DeltaIcon className="h-3.5 w-3.5" />
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <div className={`text-2xl font-semibold ${valueClass}`}>{formatSigned(value)}</div>
-                    <div className="text-xs text-muted-foreground">{resource.label}</div>
-                  </div>
-                    <div className="space-y-1 text-xs text-muted-foreground">
-                    <div className="flex items-center justify-between">
-                      <span>Gross Income</span>
-                      <span className="font-semibold text-emerald-300">
-                        {formatCompact(incomeValue)}
-                        {incomeDeltaPct === null ? '' : (
-                          <span className={`ml-1 ${incomeDeltaClass}`}>
-                            ({formatSigned(incomeDeltaValue)}, {formatDelta(incomeDeltaPct)})
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>Net Expenses</span>
-                      <span className="font-semibold text-red-400">
-                        {formatCompact(expenseNetValue)}
-                        {expenseDeltaPct === null ? '' : (
-                          <span className={`ml-1 ${expenseDeltaClass}`}>
-                            ({formatSigned(expenseDeltaValue)}, {formatDelta(expenseDeltaPct)})
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-          </div>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {[
-            { key: 'alloys', label: 'Alloys', Icon: Hammer, iconClass: 'text-orange-300' },
-            { key: 'consumer_goods', label: 'Consumer Goods', Icon: Boxes, iconClass: 'text-cyan-300' },
-            { key: 'unity', label: 'Unity', Icon: Sparkles, iconClass: 'text-fuchsia-300' },
-            { key: 'research', label: 'Research', Icon: FlaskConical, iconClass: 'text-sky-300' },
-          ].map((resource) => {
-            const value = resolveResource(totals, resource.key);
-            const incomeValue = resolveResource(incomeTotals, resource.key);
-            const expenseValue = resolveResource(expenseTotals, resource.key);
-            const prevIncomeValue = resolveResource(previousIncomeTotals, resource.key);
-            const prevExpenseValue = resolveResource(previousExpenseTotals, resource.key);
-            const prevValue = resolveResource(previousTotals, resource.key);
-            const deltaPct =
-              prevValue === 0 ? null : ((value - prevValue) / Math.abs(prevValue)) * 100;
-            const deltaValue = value - prevValue;
-            const deltaClass = deltaValue >= 0 ? 'text-emerald-300' : 'text-red-400';
-            const valueClass = value >= 0 ? 'text-emerald-400' : 'text-red-400';
-            const DeltaIcon = deltaValue >= 0 ? ChevronUp : ChevronDown;
-            const expenseNetValue = Math.abs(expenseValue);
-            const prevExpenseNetValue = Math.abs(prevExpenseValue);
-            const incomeDeltaValue = incomeValue - prevIncomeValue;
-            const expenseDeltaValue = expenseNetValue - prevExpenseNetValue;
-            const incomeDeltaPct =
-              prevIncomeValue === 0 ? null : (incomeDeltaValue / Math.abs(prevIncomeValue)) * 100;
-            const expenseDeltaPct =
-              prevExpenseNetValue === 0
-                ? null
-                : (expenseDeltaValue / Math.abs(prevExpenseNetValue)) * 100;
-            const incomeDeltaClass = incomeDeltaValue >= 0 ? 'text-emerald-300' : 'text-red-400';
-            const expenseDeltaClass = expenseDeltaValue >= 0 ? 'text-red-400' : 'text-emerald-300';
-            const researchIncome = resource.key === 'research' ? getResearchBreakdown(incomeTotals) : null;
-            const researchPrevIncome =
-              resource.key === 'research' ? getResearchBreakdown(previousIncomeTotals) : null;
-            return (
-              <Card key={resource.key} className="border-border bg-gradient-to-b from-[#151515] to-[#0f0f0f] shadow-md">
-                <CardContent className="space-y-4 p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="rounded-lg bg-black/40 p-2">
-                      <resource.Icon className={`h-4 w-4 ${resource.iconClass}`} />
-                    </div>
-                    {deltaPct === null ? null : (
-                      <div className={`flex items-center gap-1 text-xs font-semibold ${deltaClass}`}>
-                        <span>
-                          {formatDelta(deltaPct)}
-                          {` (${formatSigned(deltaValue)})`}
-                        </span>
-                        <DeltaIcon className="h-3.5 w-3.5" />
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <div className={`text-2xl font-semibold ${valueClass}`}>{formatSigned(value)}</div>
-                    <div className="text-xs text-muted-foreground">{resource.label}</div>
-                  </div>
-                    <div className="space-y-1 text-xs text-muted-foreground">
-                    {resource.key === 'research' && researchIncome && researchPrevIncome ? (
-                      <>
-                        {[
-                          { key: 'physics', label: 'Physics' },
-                          { key: 'society', label: 'Society' },
-                          { key: 'engineering', label: 'Engineering' },
-                        ].map((line) => {
-                          const current = researchIncome[line.key as 'physics' | 'society' | 'engineering'];
-                          const previous = researchPrevIncome[line.key as 'physics' | 'society' | 'engineering'];
-                          const deltaValue = current - previous;
-                          const deltaPct =
-                            previous === 0 ? null : (deltaValue / Math.abs(previous)) * 100;
-                          const deltaClass = deltaValue >= 0 ? 'text-emerald-300' : 'text-red-400';
-                          return (
-                            <div key={line.key} className="flex items-center justify-between">
-                              <span>{line.label}</span>
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                {resourceCards.map((resource) => {
+                  const value = resolveResource(totals, resource.key);
+                  const incomeValue = resolveResource(incomeTotals, resource.key);
+                  const expenseValue = resolveResource(expenseTotals, resource.key);
+                  const prevIncomeValue = resolveResource(previousIncomeTotals, resource.key);
+                  const prevExpenseValue = resolveResource(previousExpenseTotals, resource.key);
+                  const prevValue = resolveResource(previousTotals, resource.key);
+                  const deltaPct =
+                    prevValue === 0 ? null : ((value - prevValue) / Math.abs(prevValue)) * 100;
+                  const deltaValue = value - prevValue;
+                  const deltaClass = deltaValue >= 0 ? 'text-emerald-300' : 'text-red-400';
+                  const valueClass = value >= 0 ? 'text-emerald-400' : 'text-red-400';
+                  const DeltaIcon = deltaValue >= 0 ? ChevronUp : ChevronDown;
+                  const expenseNetValue = Math.abs(expenseValue);
+                  const prevExpenseNetValue = Math.abs(prevExpenseValue);
+                  const incomeDeltaValue = incomeValue - prevIncomeValue;
+                  const expenseDeltaValue = expenseNetValue - prevExpenseNetValue;
+                  const incomeDeltaPct =
+                    prevIncomeValue === 0
+                      ? null
+                      : (incomeDeltaValue / Math.abs(prevIncomeValue)) * 100;
+                  const expenseDeltaPct =
+                    prevExpenseNetValue === 0
+                      ? null
+                      : (expenseDeltaValue / Math.abs(prevExpenseNetValue)) * 100;
+                  const incomeDeltaClass = incomeDeltaValue >= 0 ? 'text-emerald-300' : 'text-red-400';
+                  const expenseDeltaClass = expenseDeltaValue >= 0 ? 'text-red-400' : 'text-emerald-300';
+                  const researchIncome =
+                    resource.key === 'research' ? getResearchBreakdown(incomeTotals) : null;
+                  const researchPrevIncome =
+                    resource.key === 'research' ? getResearchBreakdown(previousIncomeTotals) : null;
+                  return (
+                    <Card
+                      key={resource.key}
+                      className="border-border bg-gradient-to-b from-[#151515] to-[#0f0f0f] shadow-md"
+                    >
+                      <CardContent className="space-y-4 p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="rounded-lg bg-black/40 p-2">
+                            <resource.Icon className={`h-4 w-4 ${resource.iconClass}`} />
+                          </div>
+                          {deltaPct === null ? null : (
+                            <div className={`flex items-center gap-1 text-xs font-semibold ${deltaClass}`}>
+                              <span>
+                                {formatDelta(deltaPct)}
+                                {` (${formatSigned(deltaValue)})`}
+                              </span>
+                              <DeltaIcon className="h-3.5 w-3.5" />
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <div className={`text-2xl font-semibold ${valueClass}`}>{formatSigned(value)}</div>
+                          <div className="text-xs text-muted-foreground">{resource.label}</div>
+                        </div>
+                        <div className="space-y-1 text-xs text-muted-foreground">
+                          {resource.key === 'research' && researchIncome && researchPrevIncome ? (
+                            <>
+                              {[
+                                { key: 'physics', label: 'Physics' },
+                                { key: 'society', label: 'Society' },
+                                { key: 'engineering', label: 'Engineering' },
+                              ].map((line) => {
+                                const current =
+                                  researchIncome[line.key as 'physics' | 'society' | 'engineering'];
+                                const previous =
+                                  researchPrevIncome[line.key as 'physics' | 'society' | 'engineering'];
+                                const deltaValue = current - previous;
+                                const deltaPct =
+                                  previous === 0 ? null : (deltaValue / Math.abs(previous)) * 100;
+                                const deltaClass = deltaValue >= 0 ? 'text-emerald-300' : 'text-red-400';
+                                return (
+                                  <div key={line.key} className="flex items-center justify-between">
+                                    <span>{line.label}</span>
+                                    <span className="font-semibold text-emerald-300">
+                                      {formatCompact(current)}
+                                      {deltaPct === null ? '' : (
+                                        <span className={`ml-1 ${deltaClass}`}>
+                                          ({formatSigned(deltaValue)}, {formatDelta(deltaPct)})
+                                        </span>
+                                      )}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </>
+                          ) : (
+                            <div className="flex items-center justify-between">
+                              <span>Gross Income</span>
                               <span className="font-semibold text-emerald-300">
-                                {formatCompact(current)}
-                                {deltaPct === null ? '' : (
-                                  <span className={`ml-1 ${deltaClass}`}>
-                                    ({formatSigned(deltaValue)}, {formatDelta(deltaPct)})
+                                {formatCompact(incomeValue)}
+                                {incomeDeltaPct === null ? '' : (
+                                  <span className={`ml-1 ${incomeDeltaClass}`}>
+                                    ({formatSigned(incomeDeltaValue)}, {formatDelta(incomeDeltaPct)})
                                   </span>
                                 )}
                               </span>
                             </div>
-                          );
-                        })}
-                      </>
-                    ) : (
-                    <div className="flex items-center justify-between">
-                      <span>Gross Income</span>
-                      <span className="font-semibold text-emerald-300">
-                        {formatCompact(incomeValue)}
-                        {incomeDeltaPct === null ? '' : (
-                          <span className={`ml-1 ${incomeDeltaClass}`}>
-                            ({formatSigned(incomeDeltaValue)}, {formatDelta(incomeDeltaPct)})
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                    )}
-                    {resource.key === 'research' ? null : (
-                    <div className="flex items-center justify-between">
-                      <span>Net Expenses</span>
-                      <span className="font-semibold text-red-400">
-                        {formatCompact(expenseNetValue)}
-                        {expenseDeltaPct === null ? '' : (
-                          <span className={`ml-1 ${expenseDeltaClass}`}>
-                            ({formatSigned(expenseDeltaValue)}, {formatDelta(expenseDeltaPct)})
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+                          )}
+                          {resource.key === 'research' ? null : (
+                            <div className="flex items-center justify-between">
+                              <span>Net Expenses</span>
+                              <span className="font-semibold text-red-400">
+                                {formatCompact(expenseNetValue)}
+                                {expenseDeltaPct === null ? '' : (
+                                  <span className={`ml-1 ${expenseDeltaClass}`}>
+                                    ({formatSigned(expenseDeltaValue)}, {formatDelta(expenseDeltaPct)})
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
             );
-          })}
-          </div>
+          })()}
           <h2 className="mb-3 mt-6 text-xl font-semibold">Population Demographics</h2>
           <Card className="border-border">
             <CardContent className="p-4">
@@ -388,6 +344,23 @@ function resolveResource(source: Record<string, number>, key: string): number {
     return total;
   }
   return source[key] ?? 0;
+}
+
+function shouldShowResource(
+  key: string,
+  incomeTotals: Record<string, number>,
+  expenseTotals: Record<string, number>
+): boolean {
+  if (key === 'research') {
+    const breakdown = getResearchBreakdown(incomeTotals);
+    const totalIncome = breakdown.physics + breakdown.society + breakdown.engineering;
+    const totalExpense = resolveResource(expenseTotals, key);
+    return totalIncome !== 0 || totalExpense !== 0;
+  }
+
+  const incomeValue = resolveResource(incomeTotals, key);
+  const expenseValue = resolveResource(expenseTotals, key);
+  return incomeValue !== 0 || expenseValue !== 0;
 }
 
 function groupSpeciesData(data: SpeciesBreakdown[], minPercent: number): SpeciesBreakdown[] {

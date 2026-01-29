@@ -9,6 +9,7 @@ function App() {
   const [selectedCountry, setSelectedCountry] = useState<Country | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [view, setView] = useState<'empire' | 'galaxy'>('empire')
+  const [empirePanel, setEmpirePanel] = useState<'docked' | 'hidden'>('docked')
 
   useEffect(() => {
     document.documentElement.classList.add('dark')
@@ -49,11 +50,36 @@ function App() {
         </div>
       </header>
       
-      <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
+      <div className="relative flex flex-1 flex-col overflow-hidden md:flex-row">
         {view === 'empire' && (
-          <aside className="flex w-full flex-col overflow-hidden border-b border-border bg-background md:w-[360px] md:border-b-0 md:border-r">
-            <CountryList key={refreshKey} onSelectCountry={setSelectedCountry} />
-          </aside>
+          <>
+            {empirePanel === 'docked' && (
+              <aside className="relative flex w-full flex-col overflow-hidden border-b border-border bg-background md:w-[360px] md:border-b-0 md:border-r">
+                <CountryList key={refreshKey} onSelectCountry={setSelectedCountry} />
+              </aside>
+            )}
+            {empirePanel === 'docked' && (
+              <button
+                type="button"
+                onClick={() => setEmpirePanel('hidden')}
+                className="absolute top-6 z-10 hidden -translate-x-1/2 rounded-full border border-border bg-background px-3 py-2 text-base font-semibold text-muted-foreground shadow-sm transition hover:text-foreground md:inline-flex"
+                style={{ left: '360px' }}
+                aria-label="Hide empire list"
+              >
+                &lt;
+              </button>
+            )}
+            {empirePanel === 'hidden' && (
+              <button
+                type="button"
+                onClick={() => setEmpirePanel('docked')}
+                className="absolute left-0 top-6 z-10 rounded-r-full border border-border bg-background px-3 py-2 text-base font-semibold text-muted-foreground shadow-sm transition hover:text-foreground"
+                aria-label="Show empire list"
+              >
+                &gt;
+              </button>
+            )}
+          </>
         )}
         
         <main className="flex flex-1 flex-col overflow-hidden">

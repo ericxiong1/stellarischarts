@@ -63,15 +63,6 @@ export const CountryList: React.FC<CountryListProps> = ({ onSelectCountry }) => 
                 <span className="text-blue-400">Tech: {country.techPower.toFixed(2)}</span>
                 <span className="text-yellow-400">Population: {country.numSapientPops.toLocaleString()}</span>
               </div>
-              <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                {Object.entries(incomeTotals)
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([resource, amount]) => (
-                    <Badge key={resource} variant="outline">
-                      {resource}: {amount.toFixed(2)}
-                    </Badge>
-                  ))}
-              </div>
             </CardContent>
           </Card>
         ))}
