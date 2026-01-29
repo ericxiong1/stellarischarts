@@ -46,6 +46,7 @@ The frontend expects the API at `http://localhost:5000` (Vite proxy to `/api`).
 - Place `.sav` files in `saves/` or use the UI scan/upload.
 - Save filenames like `autosave_2327.07.01.sav` are parsed for the in-game date.
 - Re-upload/rescan after schema changes to refresh derived fields (ethos, civics, traditions, federation, etc).
+- Example autosaves are included.
 
 ## Migrations
 - New fields require migrations
