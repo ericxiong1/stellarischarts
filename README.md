@@ -43,7 +43,7 @@ npm run dev
 The frontend expects the API at `http://localhost:5000` (Vite proxy to `/api`).
 
 ## Uploading saves
-- Place `.sav` files in `saves/` or use the UI scan/upload.
+- Place `.sav` files in `saves/`.
 - Save filenames like `autosave_2327.07.01.sav` are parsed for the in-game date.
 - Re-upload/rescan after schema changes to refresh derived fields (ethos, civics, traditions, federation, etc).
 - Example autosaves are included.
