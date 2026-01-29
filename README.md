@@ -11,6 +11,7 @@ Parse Stellaris save files (`.sav`) and visualize empire and galaxy stats in a w
 - .NET SDK 10
 - Node.js 18+
 - PostgreSQL 14+
+- Docker Desktop (optional, for Postgres via docker-compose)
 
 ## Backend setup
 1. Copy the template config and set your connection string:
@@ -42,6 +43,14 @@ The frontend expects the API at `http://localhost:5000` (Vite proxy to `/api`).
 ## Uploading saves
 - Place `.sav` files in `saves/` or use the UI scan/upload.
 - Save filenames like `autosave_2327.07.01.sav` are parsed for the in-game date.
+- Re-upload/rescan after schema changes to refresh derived fields (ethos, civics, traditions, federation, etc).
+
+## Migrations
+- New fields require migrations
+- Run:
+  ```
+  dotnet ef database update -p backend\StellarisCharts.Api\StellarisCharts.Api.csproj -s backend\StellarisCharts.Api\StellarisCharts.Api.csproj
+  ```
 
 ## Notes
 - `saves/` and `appsettings.json` are ignored by git.
@@ -58,3 +67,4 @@ The frontend expects the API at `http://localhost:5000` (Vite proxy to `/api`).
 - `GET /api/galaxy/summary`
 - `GET /api/galaxy/species`
 - `GET /api/galaxy/species/previous`
+- `GET /api/galaxy/species/history`
